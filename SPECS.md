@@ -37,7 +37,15 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
   failed copy is removed. Emptied source folders are removed inside the opened folder (or the
   download folder in session view), never the download folder itself nor its content while a
   download runs. Closing waits for a running move.
-- **Manual tags**: ID3v2.4 (mutagen) edit, bulk and single.
+- **Manual tags**: form beside the Library table edits Title, Artist, Album, Album artist,
+  Year, Genre and Track of the selected files (mp3 as ID3v2.4, flac/opus/ogg Vorbis
+  comments, m4a atoms; wav refused per file). Values shared by the selection are shown,
+  differing ones as "<multiple values>" with a clear action removing the field from all;
+  multi-value tags show joined by "; ". Only edited fields are written (a field typed back
+  to its loaded text is no edit), an emptied field removes the tag. Edits preview in the
+  table's tag columns, are discarded on selection change, and are refused for malformed
+  Year (`2024[-05[-17]]`) or Track (`3[/12]`, 1–9999); problems show inside the form.
+  Writes run in the background like moves; closing waits for them.
 - **Auto-tag**: via SoundTag (Deezer, Discogs, MusicBrainz…), tags + cover, overwrite.
 
 ## Decisions
@@ -75,15 +83,15 @@ src/masterit/
 
 ## Roadmap
 
-Status (2026-10-27): phases 0–4 done; next is phase 5.
+Status (2026-10-27): phases 0–5 done; next is phase 6.
 
 0. Scaffold — done (`ba9e9c7`).
 1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
 2. GUI shell + Download tab (live progress, cancel) — done (`93c3c59`).
 3. Library tab + rename (bulk/single, live preview) — done (`27f1d5c`).
 4. Move (shared relocation engine, confirmation, background job, safe cleanup) — done.
-5. Manual tag edit (bulk/single). Before starting: split `gui/library_panel.py` (browsing,
-   rename, move) into smaller focused parts, since tag editing would grow it further.
+5. Manual tag edit (bulk/single); `gui/library_panel.py` split into source, rename, move
+   and tag sub-widgets sharing a `LibraryContext` — done.
 6. Repack pipeline + SoundTag adapter (+ `--json` in SoundTag). Run SoundTag with
    `--overwrite`: yt-dlp already writes title, artist, year, genre and cover, so SoundTag
    would otherwise skip downloads as fully tagged. The library layout plugs into the
@@ -94,3 +102,5 @@ Known limits:
 - A same-drive rename/move can overwrite a file created at the target in the instant
   between the check and the rename (no portable no-replace rename on FAT/exFAT).
 - Rename chains (b → ab while ab moves too) are refused rather than ordered.
+- Selecting files reads their tags on the GUI thread (cached); a huge selection may stall.
+- Editing a multi-value tag writes the typed text as a single value.

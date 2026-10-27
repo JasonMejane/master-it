@@ -10,6 +10,7 @@ from masterit.download.downloader import YtDlpDownloader
 from masterit.gui.download_panel import DownloadPanel
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.settings_store import SettingsStore
+from masterit.tags.tag_store import MutagenTagStore
 
 
 class MainWindow(QMainWindow):
@@ -38,9 +39,9 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def _must_defer_close(self) -> bool:
-        # A second close may abandon a download, never a move: it could leave a partial copy.
+        # A second close may abandon a download, never a move or tag write (partial file risk).
         is_download_pending = self.download_panel.is_running and not self._is_closing
-        return self.library_panel.is_moving or is_download_pending
+        return self.library_panel.is_busy or is_download_pending
 
     def _close_when_idle(self, event: QCloseEvent) -> None:
         event.ignore()
@@ -48,7 +49,7 @@ class MainWindow(QMainWindow):
             return
         self._is_closing = True
         self.download_panel.download_finished.connect(self._close_if_idle)
-        self.library_panel.move_finished.connect(self._close_if_idle)
+        self.library_panel.work_finished.connect(self._close_if_idle)
         self._stop_download()
 
     def _stop_download(self) -> None:
@@ -56,7 +57,7 @@ class MainWindow(QMainWindow):
             self.download_panel.stop()
 
     def _close_if_idle(self) -> None:
-        if not (self.download_panel.is_running or self.library_panel.is_moving):
+        if not (self.download_panel.is_running or self.library_panel.is_busy):
             self.close()
 
     def _restore_geometry(self) -> None:
@@ -85,5 +86,6 @@ def make_main_window(settings: QSettings) -> MainWindow:
         lambda: store.load_download_settings(default_output_dir).output_dir,
         lambda: download_panel.is_running,
         thread_pool,
+        MutagenTagStore(),
     )
     return MainWindow(store, download_panel, library_panel)

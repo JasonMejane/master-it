@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, override
 
@@ -10,21 +11,32 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor
 
+from masterit.gui.tag_labels import TAG_LABELS
 from masterit.library.relocation import Relocation, RelocationPlan
+from masterit.tags.fields import TagField, Tags
+from masterit.tags.tag_cache import TagCache
 
 type Index = QModelIndex | QPersistentModelIndex
 
-HEADERS = ("Name", "New name", "Folder")
+FILE_HEADERS = ("Name", "New name", "Folder")
+TAG_COLUMNS = tuple(TagField)
+HEADERS = FILE_HEADERS + tuple(TAG_LABELS[field] for field in TAG_COLUMNS)
 NAME_COLUMN = 0
 PREVIEW_COLUMN = 1
+FIRST_TAG_COLUMN = len(FILE_HEADERS)
 ROOT = QModelIndex()
 PROBLEM_COLOR = QColor(Qt.GlobalColor.red)
+PENDING_COLOR = QColor(Qt.GlobalColor.blue)
 
 
 def get_preview_text(entry: Relocation | None) -> str:
     if entry is None:
         return ""
     return entry.target.name if entry.problem is None else f"⚠ {entry.problem}"
+
+
+def get_tag_field(column: int) -> TagField | None:
+    return TAG_COLUMNS[column - FIRST_TAG_COLUMN] if column >= FIRST_TAG_COLUMN else None
 
 
 def describe_folder(path: Path, resolved_root: Path | None) -> str:
@@ -37,8 +49,11 @@ def describe_folder(path: Path, resolved_root: Path | None) -> str:
 class LibraryTableModel(QAbstractTableModel):
     rename_requested = Signal(object, str)
 
-    def __init__(self) -> None:
+    def __init__(self, tag_cache: TagCache) -> None:
         super().__init__()
+        self._tag_cache = tag_cache
+        self._tag_preview_paths: set[Path] = set()
+        self._tag_edits: Tags = {}
         self._files: list[Path] = []
         self._root: Path | None = None
         self._folder_texts: dict[Path, str] = {}
@@ -50,6 +65,9 @@ class LibraryTableModel(QAbstractTableModel):
         self._root = None if root is None else root.resolve()
         self._folder_texts = {path: describe_folder(path, self._root) for path in files}
         self._preview = {}
+        self._tag_cache.clear()
+        self._tag_preview_paths = set()
+        self._tag_edits = {}
         self.endResetModel()
 
     def append_file(self, path: Path) -> None:
@@ -71,6 +89,25 @@ class LibraryTableModel(QAbstractTableModel):
             return
         last_row = len(self._files) - 1
         self.dataChanged.emit(self.index(0, PREVIEW_COLUMN), self.index(last_row, PREVIEW_COLUMN))
+
+    def get_tags(self, path: Path) -> Tags:
+        return self._tag_cache.get(path)
+
+    def set_tag_preview(self, paths: Iterable[Path], edits: Tags) -> None:
+        self._tag_preview_paths = set(paths)
+        self._tag_edits = dict(edits)
+        self._emit_tags_changed()
+
+    def refresh_tags(self, paths: Iterable[Path]) -> None:
+        self._tag_cache.forget(paths)
+        self._emit_tags_changed()
+
+    def _emit_tags_changed(self) -> None:
+        if not self._files:
+            return
+        last_row = len(self._files) - 1
+        last_column = len(HEADERS) - 1
+        self.dataChanged.emit(self.index(0, FIRST_TAG_COLUMN), self.index(last_row, last_column))
 
     @override
     def rowCount(self, parent: Index = ROOT) -> int:
@@ -119,13 +156,27 @@ class LibraryTableModel(QAbstractTableModel):
         return None if handler is None else handler(path, column)
 
     def _get_display_text(self, path: Path, column: int) -> str:
+        field = get_tag_field(column)
+        if field is not None:
+            return self._get_tag_text(path, field)
         texts = (path.name, get_preview_text(self._preview.get(path)), self._folder_texts[path])
         return texts[column]
+
+    def _get_tag_text(self, path: Path, field: TagField) -> str:
+        if self._is_tag_pending(path, field):
+            return self._tag_edits[field]
+        return self._tag_cache.get(path).get(field, "")
+
+    def _is_tag_pending(self, path: Path, field: TagField) -> bool:
+        return path in self._tag_preview_paths and field in self._tag_edits
 
     def _get_edit_text(self, path: Path, column: int) -> str:
         return path.stem
 
     def _get_foreground(self, path: Path, column: int) -> QColor | None:
+        field = get_tag_field(column)
+        if field is not None:
+            return PENDING_COLOR if self._is_tag_pending(path, field) else None
         entry = self._preview.get(path)
         has_problem = column == PREVIEW_COLUMN and entry is not None and not entry.is_valid
         return PROBLEM_COLOR if has_problem else None

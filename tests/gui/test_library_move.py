@@ -6,7 +6,8 @@ from PySide6.QtWidgets import QFileDialog, QWidget
 from pytestqt.qtbot import QtBot
 
 from masterit.gui import move_job
-from masterit.gui.library_panel import LibraryPanel, make_download_protection
+from masterit.gui.library_panel import LibraryPanel
+from masterit.gui.move_action import make_download_protection
 from masterit.library.relocation import RelocationOutcome, RelocationPlan
 
 from .library_helpers import (
@@ -23,8 +24,8 @@ def start_move(
     qtbot: QtBot, panel: LibraryPanel, folder: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(folder)))
-    with qtbot.waitSignal(panel.move_finished, timeout=2000):
-        panel.move_button.click()
+    with qtbot.waitSignal(panel.work_finished, timeout=2000):
+        panel.move_action.move_button.click()
 
 
 def add_session_files(panel: LibraryPanel, root: Path, *names: str) -> list[Path]:
@@ -36,7 +37,7 @@ def add_session_files(panel: LibraryPanel, root: Path, *names: str) -> list[Path
 
 def test_move_without_selection_asks_for_it(qtbot: QtBot):
     panel = make_panel(qtbot)
-    panel.move_button.click()
+    panel.move_action.move_button.click()
     assert panel.status_label.text() == "Select files to move."
 
 
@@ -47,7 +48,7 @@ def test_cancelled_folder_choice_moves_nothing(
     [song] = add_session_files(panel, tmp_path, "Song.mp3")
     select_rows(panel, 0)
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(""))
-    panel.move_button.click()
+    panel.move_action.move_button.click()
     assert song.exists()
 
 
@@ -64,7 +65,7 @@ def test_declined_confirmation_moves_nothing(
     [song] = add_session_files(panel, tmp_path, "Song.mp3")
     select_rows(panel, 0)
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(tmp_path / "dest")))
-    panel.move_button.click()
+    panel.move_action.move_button.click()
     assert asked == [(1, tmp_path / "dest")]
     assert song.exists()
 
@@ -133,17 +134,17 @@ def test_actions_are_locked_and_progress_shown_while_moving(
     add_session_files(panel, tmp_path, "A.mp3")
     select_rows(panel, 0)
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(tmp_path / "dest")))
-    panel.move_button.click()
+    panel.move_action.move_button.click()
     try:
-        assert panel.is_moving
+        assert panel.is_busy
         assert panel.status_label.text() == "Moving 0/1\u2026"
-        assert not panel.move_button.isEnabled()
+        assert not panel.move_action.move_button.isEnabled()
         assert not panel.table_view.isEnabled()
     finally:
-        with qtbot.waitSignal(panel.move_finished, timeout=2000):
+        with qtbot.waitSignal(panel.work_finished, timeout=2000):
             release.set()
-    assert not panel.is_moving
-    assert panel.move_button.isEnabled()
+    assert not panel.is_busy
+    assert panel.move_action.move_button.isEnabled()
     assert panel.table_view.isEnabled()
 
 
@@ -194,8 +195,8 @@ def test_selection_is_read_after_folder_choice(
         return str(tmp_path / "library")
 
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose_after_selecting_more)
-    with qtbot.waitSignal(panel.move_finished, timeout=2000):
-        panel.move_button.click()
+    with qtbot.waitSignal(panel.work_finished, timeout=2000):
+        panel.move_action.move_button.click()
     assert sorted(path.name for path in (tmp_path / "library").iterdir()) == ["A.mp3", "B.mp3"]
 
 
@@ -227,12 +228,12 @@ def test_renames_are_refused_while_moving(
     select_rows(panel, 0)
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(tmp_path / "dest")))
     try:
-        panel.move_button.click()
-        panel.rename_single_file(other, "New")
-        panel.apply_rename()
+        panel.move_action.move_button.click()
+        panel.rename_bar.rename_single_file(other, "New")
+        panel.rename_bar.apply_rename()
         assert other.exists()
     finally:
-        with qtbot.waitSignal(panel.move_finished, timeout=2000):
+        with qtbot.waitSignal(panel.work_finished, timeout=2000):
             release.set()
 
 

@@ -3,15 +3,20 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QSettings, QThreadPool
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog
 from pytestqt.qtbot import QtBot
 
-from masterit.gui import move_job
+from masterit.gui import move_job, tag_job
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.main_window import MainWindow, make_main_window
 from masterit.gui.settings_store import SettingsStore
 from masterit.library.relocation import RelocationOutcome
+from masterit.tags.fields import TagField, Tags
+from masterit.tags.tag_edits import TagOutcome
+from masterit.tags.tag_store import TagStore
 
+from ..tags.fakes import FakeTagStore
 from .fakes import BlockingDownloader, make_panel, make_store
 from .library_helpers import choose, confirm_always
 
@@ -45,7 +50,9 @@ def test_closing_saves_geometry_and_reopening_restores_it(qtbot: QtBot, tmp_path
 def make_downloading_window(qtbot: QtBot, tmp_path: Path) -> MainWindow:
     store = make_store(tmp_path)
     panel = make_panel(store, lambda settings: BlockingDownloader())
-    library = LibraryPanel(lambda: tmp_path, lambda: False, QThreadPool(), confirm_always)
+    library = LibraryPanel(
+        lambda: tmp_path, lambda: False, QThreadPool(), FakeTagStore(), confirm_always
+    )
     window = MainWindow(store, panel, library)
     qtbot.addWidget(window)
     window.show()
@@ -89,7 +96,9 @@ def test_closing_while_moving_waits_for_move(
 
     monkeypatch.setattr(move_job, "relocate_file", relocate_slowly)
     store = make_store(tmp_path)
-    library = LibraryPanel(lambda: tmp_path, lambda: False, QThreadPool(), confirm_always)
+    library = LibraryPanel(
+        lambda: tmp_path, lambda: False, QThreadPool(), FakeTagStore(), confirm_always
+    )
     window = MainWindow(store, make_panel(store, lambda settings: BlockingDownloader()), library)
     qtbot.addWidget(window)
     window.show()
@@ -98,7 +107,7 @@ def test_closing_while_moving_waits_for_move(
     library.add_downloaded_file(song)
     library.table_view.selectRow(0)
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(tmp_path / "d")))
-    library.move_button.click()
+    library.move_action.move_button.click()
     try:
         window.close()
         window.close()
@@ -126,10 +135,38 @@ def test_closing_while_downloading_and_moving_waits_for_both(
     library.add_downloaded_file(song)
     library.table_view.selectRow(0)
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(tmp_path / "d")))
-    library.move_button.click()
+    library.move_action.move_button.click()
     try:
         with qtbot.waitSignal(window.download_panel.download_finished, timeout=1000):
             window.close()
+        assert window.isVisible()
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: not window.isVisible(), timeout=2000)
+
+
+def test_closing_while_tagging_waits_for_tag_writes(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    release = threading.Event()
+
+    def write_slowly(path: Path, edits: Tags, store: TagStore) -> TagOutcome:
+        release.wait(5)
+        return TagOutcome(path)
+
+    monkeypatch.setattr(tag_job, "write_tag_edits", write_slowly)
+    window = make_window(qtbot, tmp_path)
+    window.show()
+    library = window.library_panel
+    library.add_downloaded_file(tmp_path / "Song.mp3")
+    library.table_view.selectRow(0)
+    genre_input = library.tag_form.field_inputs[TagField.GENRE]
+    QTest.keyClicks(genre_input, "Rock")
+    library.tag_form.apply_button.click()
+    try:
+        window.close()
+        window.close()
+        qtbot.wait(100)
         assert window.isVisible()
     finally:
         release.set()

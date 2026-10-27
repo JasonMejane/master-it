@@ -6,8 +6,12 @@ from PySide6.QtCore import QItemSelectionModel, QThreadPool
 from PySide6.QtWidgets import QFileDialog, QWidget
 from pytestqt.qtbot import QtBot
 
-from masterit.gui.library_panel import LibraryPanel, MoveConfirmation
+from masterit.gui.library_panel import LibraryPanel
+from masterit.gui.move_action import MoveConfirmation
 from masterit.library.relocation import RelocationPlan
+from masterit.tags.tag_store import TagStore
+
+from ..tags.fakes import FakeTagStore
 
 
 def confirm_always(parent: QWidget, plan: RelocationPlan, folder: Path) -> bool:
@@ -27,8 +31,15 @@ def make_panel(
     download_folder: Path = Path("/music/YT_DL"),
     confirm_move: MoveConfirmation = confirm_always,
     is_downloading: Callable[[], bool] = lambda: False,
+    tag_store: TagStore | None = None,
 ) -> LibraryPanel:
-    panel = LibraryPanel(lambda: download_folder, is_downloading, QThreadPool(), confirm_move)
+    panel = LibraryPanel(
+        lambda: download_folder,
+        is_downloading,
+        QThreadPool(),
+        tag_store or FakeTagStore(),
+        confirm_move,
+    )
     qtbot.addWidget(panel)
     return panel
 
@@ -42,7 +53,7 @@ def choose(folder: str) -> Callable[..., str]:
 
 def open_folder(panel: LibraryPanel, folder: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(folder)))
-    panel.open_folder_button.click()
+    panel.source_bar.open_folder_button.click()
 
 
 def select_rows(panel: LibraryPanel, *rows: int) -> None:
