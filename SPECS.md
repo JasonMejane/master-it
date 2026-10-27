@@ -101,7 +101,7 @@ src/masterit/
 
 ## Roadmap
 
-Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7c, 7d providers done).
+Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7e done).
 
 0. Scaffold — done (`ba9e9c7`).
 1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
@@ -125,9 +125,13 @@ Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7c, 7d provide
    d. `tagging/metadata/providers/`, one commit per service: Deezer (track and cover);
       MusicBrainz/ListenBrainz; Discogs; iTunes, Last.fm, YouTube cover — done. Odd JSON
       fields read as missing (`web/json_fields.py`), as SoundTag's optional chaining does.
-   e. Album sources (`*-album`) and resolver, album tagging.
-   f. Processing (write policy), `NativeTagger`, settings dialog, adapter removed. File names
-      with undecodable bytes become U+FFFD before searching, as Node reads them.
+   e. Album sources (Deezer, MusicBrainz, Discogs) and the album resolver — done.
+   f. Processing (album tracks, write policy), `NativeTagger`, settings dialog, adapter
+      removed. File names with undecodable bytes become U+FFFD before searching, as Node
+      reads them.
+      API keys in a "Settings…" menu dialog (no import from SoundTag's `.env`); the
+      MusicBrainz User-Agent defaults to `MasterIt/<version> ( <repo URL> )`. WAV files fail
+      with a reason, as in the manual tag editor.
 
 Known limits:
 - A same-drive rename/move can overwrite a file created at the target in the instant
