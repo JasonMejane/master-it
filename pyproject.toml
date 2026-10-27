@@ -32,6 +32,8 @@ addopts = "--strict-markers --cov=masterit --cov-branch"
 xfail_strict = true
 filterwarnings = ["error"]
 qt_api = "pyside6"
+qt_log_level_fail = "WARNING"
+qt_log_ignore = ["This plugin does not support propagateSizeHints"]
 
 [tool.coverage.run]
 omit = ["*/masterit/__main__.py"]

@@ -1,17 +1,8 @@
-from collections.abc import Collection
-
 from masterit.download.cancellation import CancelToken
-from masterit.download.events import EventHandler, ItemFailed
+from masterit.download.events import ItemFailed
 from masterit.gui.download_job import Downloader, DownloadJob
 
-from .fakes import CrashingDownloader
-
-
-class FailingDownloader:
-    def download(
-        self, urls: Collection[str], on_event: EventHandler, cancel_token: CancelToken
-    ) -> None:
-        on_event(ItemFailed(next(iter(urls)), None, "unavailable"))
+from .fakes import CrashingDownloader, FailingDownloader
 
 
 def run_job(downloader: Downloader) -> list[object]:

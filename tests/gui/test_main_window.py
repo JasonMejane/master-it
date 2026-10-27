@@ -3,6 +3,7 @@ from pathlib import Path
 from PySide6.QtCore import QSettings
 from pytestqt.qtbot import QtBot
 
+from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.main_window import MainWindow, make_main_window
 from masterit.gui.settings_store import SettingsStore
 
@@ -23,7 +24,7 @@ def test_main_window_is_titled_masterit(qtbot: QtBot, tmp_path: Path):
 def test_main_window_has_download_tab(qtbot: QtBot, tmp_path: Path):
     window = make_window(qtbot, tmp_path)
     tabs = window.tabs
-    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Download"]
+    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Download", "Library"]
 
 
 def test_closing_saves_geometry_and_reopening_restores_it(qtbot: QtBot, tmp_path: Path):
@@ -37,7 +38,8 @@ def test_closing_saves_geometry_and_reopening_restores_it(qtbot: QtBot, tmp_path
 
 def make_downloading_window(qtbot: QtBot, tmp_path: Path) -> MainWindow:
     store = make_store(tmp_path)
-    window = MainWindow(store, make_panel(store, lambda settings: BlockingDownloader()))
+    panel = make_panel(store, lambda settings: BlockingDownloader())
+    window = MainWindow(store, panel, LibraryPanel())
     qtbot.addWidget(window)
     window.show()
     window.download_panel.url_input.setPlainText("https://a")
@@ -61,3 +63,9 @@ def test_second_close_while_downloading_closes_at_once(qtbot: QtBot, tmp_path: P
     assert not window.isVisible()
     with qtbot.waitSignal(window.download_panel.download_finished, timeout=1000):
         pass
+
+
+def test_downloaded_files_reach_library(qtbot: QtBot, tmp_path: Path):
+    window = make_window(qtbot, tmp_path)
+    window.download_panel.file_downloaded.emit(Path("/music/Song.mp3"))
+    assert window.library_panel.table_model.get_path(0) == Path("/music/Song.mp3")

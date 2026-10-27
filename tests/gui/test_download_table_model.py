@@ -98,3 +98,9 @@ def test_cancelling_unfinished_rows_updates_view(qtbot: QtBot):
     with qtbot.waitSignal(model.dataChanged):
         model.mark_unfinished_cancelled()
     assert get_text(model, 0, 1) == "Cancelled"
+
+
+def test_cancelling_empty_model_emits_nothing(qtbot: QtBot):
+    model = DownloadTableModel()
+    with qtbot.assertNotEmitted(model.dataChanged):
+        model.mark_unfinished_cancelled()

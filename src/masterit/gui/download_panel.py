@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from masterit.download.cancellation import CancelToken
+from masterit.download.events import DownloadEvent, ItemCompleted
 from masterit.download.settings import AUDIO_QUALITIES, AudioCodec, DownloadSettings
 from masterit.download.url_input import parse_urls
 from masterit.gui.download_job import Downloader, DownloadJob
@@ -47,6 +48,7 @@ def format_summary(summary: DownloadSummary) -> str:
 
 class DownloadPanel(QWidget):
     download_finished = Signal()
+    file_downloaded = Signal(object)
 
     def __init__(
         self,
@@ -100,11 +102,16 @@ class DownloadPanel(QWidget):
         self._cancel_token = job.cancel_token
         self._crash_message = ""
         job.signals.event_received.connect(self.table_model.apply_event)
+        job.signals.event_received.connect(self._announce_downloaded_file)
         job.signals.crashed.connect(self._remember_crash)
         job.signals.finished.connect(self._finish_download)
         self._set_running(True)
         self.status_label.setText("Downloading…")
         self._thread_pool.start(job)
+
+    def _announce_downloaded_file(self, event: DownloadEvent) -> None:
+        if isinstance(event, ItemCompleted):
+            self.file_downloaded.emit(event.file_path)
 
     def _remember_crash(self, message: str) -> None:
         self._crash_message = message

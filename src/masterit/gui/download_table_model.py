@@ -47,6 +47,8 @@ class DownloadTableModel(QAbstractTableModel):
 
     def mark_unfinished_cancelled(self) -> None:
         self._rows.mark_unfinished_cancelled()
+        if not self._rows.count:
+            return
         last_index = self.index(self._rows.count - 1, len(HEADERS) - 1)
         self.dataChanged.emit(self.index(0, 0), last_index)
 

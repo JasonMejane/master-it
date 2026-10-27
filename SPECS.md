@@ -24,6 +24,13 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
   a file not converted to the chosen codec counts as failed.
   Codec and quality configurable (mp3/opus/m4a/flac), default mp3 192.
 - **Rename**: bulk remove substring, bulk prefix/suffix, single-file rename.
+- **Library tab**: lists this session's downloads, or any opened folder (recursive, hidden
+  entries skipped). A live "New name" column previews the rename of the selected rows.
+- **Rename rules**: "Remove text" is case-insensitive and only tidies around what it removed
+  (emptied brackets, doubled spaces, stranded separators). Names Windows cannot read
+  (`/ \ : * ? " < > |`, control characters) or starting with "." are refused. A rename onto
+  an existing file is refused, including chains (b → ab while ab moves too). Inline edit
+  (double-click/F2) renames one file; a typed extension is ignored.
 - **Move**: select files, choose destination, preview, apply; conflicts reported.
 - **Manual tags**: ID3v2.4 (mutagen) edit, bulk and single.
 - **Auto-tag**: via SoundTag (Deezer, Discogs, MusicBrainz…), tags + cover, overwrite.
@@ -64,7 +71,7 @@ src/masterit/
 0. Scaffold — done.
 1. Download core (yt-dlp faked in tests) — done.
 2. GUI shell + Download tab (live progress, cancel) — done.
-3. Results table + rename (bulk/single, preview).
+3. Results table + rename (bulk/single, preview) — done.
 4. Move plans + apply.
 5. Manual tag edit (bulk/single).
 6. Repack pipeline + SoundTag adapter (+ `--json` in SoundTag). Run SoundTag with

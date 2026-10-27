@@ -8,18 +8,24 @@ from PySide6.QtWidgets import QMainWindow, QTabWidget
 
 from masterit.download.downloader import YtDlpDownloader
 from masterit.gui.download_panel import DownloadPanel
+from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.settings_store import SettingsStore
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, store: SettingsStore, download_panel: DownloadPanel) -> None:
+    def __init__(
+        self, store: SettingsStore, download_panel: DownloadPanel, library_panel: LibraryPanel
+    ) -> None:
         super().__init__()
         self.setWindowTitle("MasterIt")
         self._store = store
         self.download_panel = download_panel
+        self.library_panel = library_panel
         self._is_closing = False
         self.tabs = QTabWidget()
         self.tabs.addTab(download_panel, "Download")
+        self.tabs.addTab(library_panel, "Library")
+        download_panel.file_downloaded.connect(library_panel.add_downloaded_file)
         self.setCentralWidget(self.tabs)
         self._restore_geometry()
 
@@ -57,4 +63,4 @@ def make_main_window(settings: QSettings) -> MainWindow:
         get_default_output_dir(),
         ffmpeg_available=shutil.which("ffmpeg") is not None,
     )
-    return MainWindow(store, panel)
+    return MainWindow(store, panel, LibraryPanel())

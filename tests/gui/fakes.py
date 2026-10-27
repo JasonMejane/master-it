@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QSettings, QThreadPool
 
 from masterit.download.cancellation import CancelToken
-from masterit.download.events import EventHandler, ItemCompleted, ItemRef
+from masterit.download.events import EventHandler, ItemCompleted, ItemFailed, ItemRef
 from masterit.download.settings import DownloadSettings
 from masterit.gui.download_job import Downloader
 from masterit.gui.download_panel import DownloadPanel
@@ -53,3 +53,10 @@ class CrashingDownloader:
         self, urls: Collection[str], on_event: EventHandler, cancel_token: CancelToken
     ) -> None:
         raise RuntimeError("boom")
+
+
+class FailingDownloader:
+    def download(
+        self, urls: Collection[str], on_event: EventHandler, cancel_token: CancelToken
+    ) -> None:
+        on_event(ItemFailed(next(iter(urls)), None, "unavailable"))

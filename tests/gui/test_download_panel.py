@@ -14,6 +14,7 @@ from .fakes import (
     SONG,
     BlockingDownloader,
     CrashingDownloader,
+    FailingDownloader,
     RecordingDownloader,
     make_panel,
     make_store,
@@ -196,3 +197,21 @@ def test_stop_cancels_running_download_before_closing(qtbot: QtBot, tmp_path: Pa
     with qtbot.waitSignal(panel.download_finished, timeout=1000):
         pass
     assert not panel.is_running
+
+
+def test_completed_downloads_are_announced(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    panel.url_input.setPlainText("https://a")
+    downloaded: list[Path] = []
+    panel.file_downloaded.connect(downloaded.append)
+    with qtbot.waitSignal(panel.download_finished, timeout=5000):
+        panel.download_button.click()
+    assert downloaded == [Path("/music/Song.mp3")]
+
+
+def test_failed_downloads_are_not_announced(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, FailingDownloader()).panel
+    downloaded: list[Path] = []
+    panel.file_downloaded.connect(downloaded.append)
+    start_download(qtbot, panel)
+    assert downloaded == []
