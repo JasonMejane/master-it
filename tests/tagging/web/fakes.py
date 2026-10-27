@@ -1,4 +1,5 @@
 import json
+import urllib.parse
 from collections.abc import Callable
 from typing import Any
 
@@ -42,3 +43,20 @@ def make_json_response(payload: Any, status: int = 200) -> HttpResponse:
 
 def make_image_response(body: bytes = b"image", status: int = 200) -> HttpResponse:
     return HttpResponse(status, {"content-type": "image/jpeg"}, body)
+
+
+# Answers API paths of one host from `responses`, and serves any other host as an image.
+class FakeWeb:
+    def __init__(self, api_host: str, responses: dict[str, Any], missing: Any = None) -> None:
+        self.api_host = api_host
+        self.responses = responses
+        self.missing: Any = {} if missing is None else missing
+        self.requested: list[str] = []
+        self.transport = FakeTransport(self._respond)
+
+    def _respond(self, request: HttpRequest) -> HttpResponse:
+        url = urllib.parse.urlsplit(request.url)
+        self.requested.append(f"{url.path}?{url.query}" if url.query else url.path)
+        if url.hostname != self.api_host:
+            return make_image_response(f"image {url.path}".encode())
+        return make_json_response(self.responses.get(url.path, self.missing))

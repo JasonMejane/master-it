@@ -37,6 +37,8 @@ def refuse_request(request: HttpRequest) -> HttpResponse:
     raise AssertionError(f"unexpected request: {request.url}")
 
 
-def make_services(transport: FakeTransport | None = None) -> ProviderServices:
-    images = ImageCache(transport or FakeTransport(refuse_request))
-    return ProviderServices(FakeClock(), images, BatchCache())
+def make_services(
+    transport: FakeTransport | None = None, clock: FakeClock | None = None
+) -> ProviderServices:
+    web = transport or FakeTransport(refuse_request)
+    return ProviderServices(clock or FakeClock(), web, ImageCache(web), BatchCache())

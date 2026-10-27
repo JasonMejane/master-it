@@ -4,6 +4,7 @@ from typing import Protocol
 from masterit.tagging.web.batch_cache import BatchCache
 from masterit.tagging.web.images import ImageCache, ImageRequest
 from masterit.tagging.web.rate_limiter import Clock
+from masterit.tagging.web.transport import HttpTransport
 
 
 @dataclass(frozen=True)
@@ -120,5 +121,6 @@ class CoverProvider(Protocol):
 @dataclass(frozen=True)
 class ProviderServices:
     clock: Clock
+    transport: HttpTransport
     images: ImageCache
     cache: BatchCache

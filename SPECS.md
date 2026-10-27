@@ -101,7 +101,7 @@ src/masterit/
 
 ## Roadmap
 
-Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7c done).
+Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7c, 7d Deezer done).
 
 0. Scaffold — done (`ba9e9c7`).
 1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
@@ -122,9 +122,12 @@ Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7c done).
    a. `tagging/web/`: HTTP transport (http(s) only), JSON/image reads, rate limiter, caches — done.
    b. `tagging/paths/`: file-name parser, folder context, library path, album plan — done.
    c. `tagging/metadata/`: track matching, merge helpers, tracklist, metadata chain — done.
-   d. Providers: Deezer, MusicBrainz/ListenBrainz, Discogs, iTunes, Last.fm, YouTube cover.
-   e. Album resolver and album tagging.
-   f. Processing (write policy), `NativeTagger`, settings dialog, adapter removed.
+   d. `tagging/metadata/providers/`, one commit per service: Deezer (track and cover) — done;
+      MusicBrainz/ListenBrainz; Discogs; iTunes, Last.fm, YouTube cover. Odd JSON fields read
+      as missing (`web/json_fields.py`), as SoundTag's optional chaining does.
+   e. Album sources (`*-album`) and resolver, album tagging.
+   f. Processing (write policy), `NativeTagger`, settings dialog, adapter removed. File names
+      with undecodable bytes become U+FFFD before searching, as Node reads them.
 
 Known limits:
 - A same-drive rename/move can overwrite a file created at the target in the instant
