@@ -1,0 +1,60 @@
+[project]
+name = "masterit"
+version = "0.1.0"
+description = "Download audio from YouTube with yt-dlp, then rename, move and tag it into a clean library."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "mutagen",
+    "pyside6",
+    "yt-dlp",
+]
+
+[project.gui-scripts]
+masterit = "masterit.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pyright",
+    "pytest",
+    "pytest-cov",
+    "pytest-qt",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --cov=masterit --cov-branch"
+xfail_strict = true
+filterwarnings = ["error"]
+qt_api = "pyside6"
+
+[tool.coverage.run]
+omit = ["*/masterit/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B", "UP", "SIM", "C90", "RUF", "S", "PTH", "T20"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 3
+
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
