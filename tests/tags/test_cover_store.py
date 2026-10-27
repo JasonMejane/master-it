@@ -5,7 +5,7 @@ import pytest
 from masterit.tags.cover_store import MutagenCoverStore
 from masterit.tags.tag_store import TagError
 
-from .fixtures import BACK_COVER, FORMATS, copy_fixture, embed_cover, open_raw
+from .fixtures import BACK_COVER, FORMATS, copy_fixture, count_pictures, embed_cover, open_raw
 
 COVER = b"front-cover"
 
@@ -64,3 +64,53 @@ def test_malformed_ogg_picture_is_skipped(tmp_path: Path):
     audio.save()
     embed_cover(song, COVER)
     assert MutagenCoverStore().read(song) == COVER
+
+
+PNG_COVER = b"\x89PNG\r\nnew-cover"
+
+
+@pytest.mark.parametrize("extension", FORMATS)
+def test_written_cover_replaces_every_picture(tmp_path: Path, extension: str):
+    song = copy_fixture(tmp_path, extension)
+    embed_cover(song, b"back", BACK_COVER)
+    embed_cover(song, COVER)
+    MutagenCoverStore().write(song, PNG_COVER)
+    assert MutagenCoverStore().read(song) == PNG_COVER
+    assert count_pictures(song) == 1
+
+
+@pytest.mark.parametrize("extension", FORMATS)
+def test_cover_is_written_to_a_file_without_tags(tmp_path: Path, extension: str):
+    song = copy_fixture(tmp_path, extension)
+    open_raw(song).delete()
+    MutagenCoverStore().write(song, b"\xff\xd8\xffjpeg")
+    assert MutagenCoverStore().read(song) == b"\xff\xd8\xffjpeg"
+
+
+def test_written_cover_is_a_front_cover_with_its_image_type(tmp_path: Path):
+    song = copy_fixture(tmp_path, "mp3")
+    MutagenCoverStore().write(song, PNG_COVER)
+    picture = open_raw(song).tags.getall("APIC")[0]
+    assert (picture.type, picture.mime) == (3, "image/png")
+
+
+def test_cover_of_a_wav_file_is_refused(tmp_path: Path):
+    song = copy_fixture(tmp_path, "wav")
+    with pytest.raises(TagError):
+        MutagenCoverStore().write(song, COVER)
+
+
+def test_cover_of_a_broken_file_is_refused(tmp_path: Path):
+    song = tmp_path / "broken.mp3"
+    song.write_bytes(b"not audio")
+    with pytest.raises(TagError):
+        MutagenCoverStore().write(song, COVER)
+
+
+def test_ogg_cover_replaces_legacy_cover_art(tmp_path: Path):
+    song = copy_fixture(tmp_path, "opus")
+    audio = open_raw(song)
+    audio["coverart"] = ["b2xk"]
+    audio.save()
+    MutagenCoverStore().write(song, PNG_COVER)
+    assert "coverart" not in open_raw(song)

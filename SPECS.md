@@ -126,12 +126,14 @@ Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7e done).
       MusicBrainz/ListenBrainz; Discogs; iTunes, Last.fm, YouTube cover — done. Odd JSON
       fields read as missing (`web/json_fields.py`), as SoundTag's optional chaining does.
    e. Album sources (Deezer, MusicBrainz, Discogs) and the album resolver — done.
-   f. Processing (album tracks, write policy), `NativeTagger`, settings dialog, adapter
-      removed. File names with undecodable bytes become U+FFFD before searching, as Node
-      reads them.
-      API keys in a "Settings…" menu dialog (no import from SoundTag's `.env`); the
-      MusicBrainz User-Agent defaults to `MasterIt/<version> ( <repo URL> )`. WAV files fail
-      with a reason, as in the manual tag editor.
+   f. In three commits: tag I/O for the tagger (`tagging/track_tags.py`: info, extras with
+      counts, cover writes through `MutagenCoverStore`, written through a hidden copy that
+      replaces the file, as SoundTag does) — done;
+      processing (album tracks, write policy) and `NativeTagger`; settings dialog, wiring,
+      adapter removed. File names with undecodable bytes become U+FFFD before searching, as
+      Node reads them. API keys in a "Settings…" menu dialog (no import from SoundTag's
+      `.env`); the MusicBrainz User-Agent defaults to `MasterIt/<version> ( <repo URL> )`.
+      WAV files fail with a reason, as in the manual tag editor.
 
 Known limits:
 - A same-drive rename/move can overwrite a file created at the target in the instant
@@ -160,5 +162,9 @@ Known limits:
   tolerance counts letters outside the Basic Multilingual Plane as one character, not two.
 - Native tagger, MusicBrainz: a request that times out, even while its answer downloads, is
   asked once more (SoundTag only retries a timeout before the answer starts).
+- Native tagger: a tagged file needs free space for one copy of itself while it is written.
+  A copy left by a killed app (hidden `.<id>.<ext>` file) keeps its folder from counting
+  as empty after a move.
+  On m4a files, a legacy numeric genre (`gnre`) is neither read nor removed.
 - Layout on case-insensitive drives: an artist folder existing with another casing is
   reused, but the file is not seen as in place on later repacks.

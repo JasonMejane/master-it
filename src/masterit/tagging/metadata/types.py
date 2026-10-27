@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Literal, Protocol
 
 from masterit.tagging.web.batch_cache import BatchCache
 from masterit.tagging.web.images import ImageCache, ImageRequest
@@ -13,6 +13,11 @@ class TrackInfo:
     artist: str = ""
     album: str = ""
     year: str = ""
+
+
+type ExtraField = Literal[
+    "genre", "album_artist", "track_number", "track_count", "disc_number", "disc_count"
+]
 
 
 @dataclass(frozen=True)

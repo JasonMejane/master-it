@@ -109,3 +109,18 @@ COVER_WRITERS: dict[str, Callable[[Any, bytes, int], None]] = {
     ".ogg": embed_ogg_cover,
     ".opus": embed_ogg_cover,
 }
+
+
+def count_pictures(path: Path) -> int:
+    audio = open_raw(path)
+    if path.suffix == ".flac":
+        return len(audio.pictures)
+    return PICTURE_COUNTERS[path.suffix](audio.tags)
+
+
+PICTURE_COUNTERS: dict[str, Callable[[Any], int]] = {
+    ".mp3": lambda tags: len(tags.getall("APIC")),
+    ".m4a": lambda tags: len(tags.get("covr", [])),
+    ".ogg": lambda tags: len(tags.get("metadata_block_picture", [])),
+    ".opus": lambda tags: len(tags.get("metadata_block_picture", [])),
+}

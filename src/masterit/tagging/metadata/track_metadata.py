@@ -2,9 +2,15 @@ import re
 from dataclasses import fields, replace
 
 from masterit.tagging.ascii_words import WORD_END, WORD_START
-from masterit.tagging.metadata.types import TrackExtras, TrackInfo, TrackMetadata, TrackSearch
+from masterit.tagging.metadata.types import (
+    ExtraField,
+    TrackExtras,
+    TrackInfo,
+    TrackMetadata,
+    TrackSearch,
+)
 
-type ExtraGroup = tuple[str, ...]
+type ExtraGroup = tuple[ExtraField, ...]
 
 YEAR_PATTERN = re.compile(rf"{WORD_START}[0-9]{{4}}{WORD_END}")
 TRACK_FIELDS = tuple(field.name for field in fields(TrackInfo))
@@ -74,7 +80,7 @@ def get_changed_extras(existing: TrackExtras, found: TrackExtras) -> TrackExtras
 
 
 # A count from the old position would not fit the new one.
-def get_stale_extras(existing: TrackExtras, found: TrackExtras) -> list[str]:
+def get_stale_extras(existing: TrackExtras, found: TrackExtras) -> list[ExtraField]:
     return [
         name
         for group in get_changed_groups(existing, found)
