@@ -18,6 +18,10 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
 
 - **Download**: multi-URL input; options ported from `Scripts/YT_Audio_DL/ytdl.py`
   (title cleaning of "(Official Video)" etc., thumbnail embed, playlist subfolder).
+  "Artist - Title" titles are split into tags only when yt-dlp found no artist; files are
+  named `Artist - Title.<ext>` when the artist is known.
+  Each video ends as completed (non-fatal errors as warnings) or failed, reported once;
+  a file not converted to the chosen codec counts as failed.
   Codec and quality configurable (mp3/opus/m4a/flac), default mp3 192.
 - **Rename**: bulk remove substring, bulk prefix/suffix, single-file rename.
 - **Move**: select files, choose destination, preview, apply; conflicts reported.
@@ -53,10 +57,12 @@ src/masterit/
 ## Roadmap
 
 0. Scaffold — done.
-1. Download core (yt-dlp faked in tests).
+1. Download core (yt-dlp faked in tests) — done.
 2. GUI shell + Download tab (live progress, cancel).
 3. Results table + rename (bulk/single, preview).
 4. Move plans + apply.
 5. Manual tag edit (bulk/single).
-6. Repack pipeline + SoundTag adapter (+ `--json` in SoundTag).
+6. Repack pipeline + SoundTag adapter (+ `--json` in SoundTag). Run SoundTag with
+   `--overwrite`: yt-dlp already writes title, artist, year, genre and cover, so SoundTag
+   would otherwise skip downloads as fully tagged.
 7. Optional: native Python tagger.
