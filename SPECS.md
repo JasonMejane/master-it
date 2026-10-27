@@ -20,8 +20,11 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
   (title cleaning of "(Official Video)" etc., thumbnail embed, playlist subfolder).
   "Artist - Title" titles are split into tags only when yt-dlp found no artist; files are
   named `Artist - Title.<ext>` when the artist is known.
-  Each video ends as completed (non-fatal errors as warnings) or failed, reported once;
-  a file not converted to the chosen codec counts as failed.
+  Each pasted link shows as pending at once; a playlist's videos are listed as pending as
+  soon as yt-dlp resolves it, right after their link. Each video ends as completed
+  (non-fatal errors as warnings) or failed, reported once; a file not converted to the chosen
+  codec counts as failed, a row still pending at the end fails as "Not downloaded" (cancelled
+  when the download was cancelled).
   Codec and quality configurable (mp3/opus/m4a/flac), default mp3 192.
 - **Rename**: bulk remove substring, bulk prefix/suffix, single-file rename.
 - **Library tab**: lists this session's downloads, or any opened folder (recursive, hidden

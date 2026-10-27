@@ -1,17 +1,28 @@
+from collections.abc import Sequence
 from typing import Any, override
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
 from PySide6.QtGui import QColor
 
 from masterit.download.events import DownloadEvent
-from masterit.gui.download_rows import DownloadRow, DownloadRows, DownloadSummary, RowStatus
+from masterit.gui.download_rows import (
+    DownloadRow,
+    DownloadRows,
+    DownloadSummary,
+    Placement,
+    RowStatus,
+)
 
 type Index = QModelIndex | QPersistentModelIndex
 
 HEADERS = ("Title", "Status", "Details")
 ROOT = QModelIndex()
-FAILED_COLOR = QColor(Qt.GlobalColor.red)
+STATUS_COLORS = {
+    RowStatus.FAILED: QColor(Qt.GlobalColor.red),
+    RowStatus.PENDING: QColor(Qt.GlobalColor.gray),
+}
 STATUS_LABELS = {
+    RowStatus.PENDING: "Pending",
     RowStatus.COMPLETED: "Done",
     RowStatus.WARNING: "Done with warnings",
     RowStatus.FAILED: "Failed",
@@ -32,21 +43,39 @@ class DownloadTableModel(QAbstractTableModel):
         super().__init__()
         self._rows = DownloadRows()
 
-    def apply_event(self, event: DownloadEvent) -> None:
-        if self._rows.is_new_row(event):
-            self._insert_row(event)
+    def add_links(self, urls: Sequence[str]) -> None:
+        if not urls:
             return
-        index = self._rows.apply(event)
-        self.dataChanged.emit(self.index(index, 0), self.index(index, len(HEADERS) - 1))
-
-    def _insert_row(self, event: DownloadEvent) -> None:
         count = self._rows.count
-        self.beginInsertRows(QModelIndex(), count, count)
-        self._rows.apply(event)
+        self.beginInsertRows(ROOT, count, count + len(urls) - 1)
+        self._rows.add_links(urls)
+        self.endInsertRows()
+
+    def apply_event(self, event: DownloadEvent) -> None:
+        placement = self._rows.find_placement(event)
+        if placement.is_new:
+            self._insert_row(event, placement)
+            return
+        self._rows.apply_at(event, placement)
+        last_column = len(HEADERS) - 1
+        self.dataChanged.emit(
+            self.index(placement.index, 0), self.index(placement.index, last_column)
+        )
+
+    def _insert_row(self, event: DownloadEvent, placement: Placement) -> None:
+        self.beginInsertRows(ROOT, placement.index, placement.index)
+        self._rows.apply_at(event, placement)
         self.endInsertRows()
 
     def mark_unfinished_cancelled(self) -> None:
         self._rows.mark_unfinished_cancelled()
+        self._emit_all_changed()
+
+    def mark_pending_failed(self) -> None:
+        self._rows.mark_pending_failed()
+        self._emit_all_changed()
+
+    def _emit_all_changed(self) -> None:
         if not self._rows.count:
             return
         last_index = self.index(self._rows.count - 1, len(HEADERS) - 1)
@@ -84,8 +113,8 @@ class DownloadTableModel(QAbstractTableModel):
         return self._get_role_data(row, index.column(), role)
 
     def _get_role_data(self, row: DownloadRow, column: int, role: int) -> Any:
-        if role == Qt.ItemDataRole.ForegroundRole and row.status == RowStatus.FAILED:
-            return FAILED_COLOR
+        if role == Qt.ItemDataRole.ForegroundRole:
+            return STATUS_COLORS.get(row.status)
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole):
             return get_cell_text(row, column)
         return None

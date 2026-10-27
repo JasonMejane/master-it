@@ -13,6 +13,7 @@ from masterit.download.events import (
     ItemCompleted,
     ItemFailed,
     ItemProgress,
+    ItemQueued,
     ItemRef,
 )
 from masterit.download.settings import DownloadSettings
@@ -42,8 +43,24 @@ class FakeYoutubeDL:
         return 0
 
     def start_item(self, item: ItemRef, incomplete: bool = False) -> None:
-        info = {"id": item.item_id, "title": item.title}
+        """Resolved video info, which yt-dlp tags with its extractor."""
+        info = {"id": item.item_id, "title": item.title, "extractor_key": "Youtube"}
         self.options["match_filter"](info, incomplete=incomplete)
+
+    def match_playlist(self, entries: list[ItemRef]) -> None:
+        """Playlist info first, then every flat entry before any download, like real yt-dlp."""
+        self.options["match_filter"]({"playlist": "List", "title": "List"}, incomplete=True)
+        for entry in entries:
+            self.match_flat_entry(entry)
+
+    def match_flat_entry(self, item: ItemRef) -> None:
+        info = {"_type": "url", "id": item.item_id, "title": item.title}
+        self.options["match_filter"](info, incomplete=True)
+
+    def match_entry_to_download(self, item: ItemRef, number: int) -> None:
+        """The playlist loop adds playlist fields to the flat entry before processing it."""
+        info = {"_type": "url", "id": item.item_id, "title": item.title}
+        self.options["match_filter"]({**info, "playlist_autonumber": number}, incomplete=True)
 
     def report_progress(self, status: dict[str, Any]) -> None:
         for hook in self.options["progress_hooks"]:
@@ -312,3 +329,99 @@ def test_default_factory_builds_real_youtube_dl_with_options():
     with make_youtube_dl({"format": "bestaudio/best"}) as ydl:
         assert isinstance(ydl, YoutubeDL)
         assert ydl.params.get("format") == "bestaudio/best"
+
+
+def test_playlist_entries_are_queued_before_downloading():
+    def complete_playlist(ydl: FakeYoutubeDL, url: str) -> None:
+        ydl.match_playlist([SONG, OTHER])
+        for number, item in enumerate((SONG, OTHER), start=1):
+            ydl.match_entry_to_download(item, number)
+            ydl.start_item(item)
+            ydl.finish_file(f"/music/list/{item.title}.mp3")
+
+    assert run_download(complete_playlist, ["list"]) == [
+        ItemQueued("list", SONG),
+        ItemQueued("list", OTHER),
+        ItemCompleted("list", SONG, Path("/music/list/Song.mp3")),
+        ItemCompleted("list", OTHER, Path("/music/list/Other.mp3")),
+    ]
+
+
+def test_unavailable_queued_entry_fails_on_its_own():
+    def unavailable_entry(ydl: FakeYoutubeDL, url: str) -> None:
+        ydl.match_playlist([SONG, OTHER])
+        ydl.match_entry_to_download(SONG, 1)
+        ydl.log_error("ERROR: [youtube] id1: Video unavailable")
+        ydl.match_entry_to_download(OTHER, 2)
+        ydl.start_item(OTHER)
+        ydl.finish_file("/music/Other.mp3")
+
+    assert run_download(unavailable_entry, ["list"])[2:] == [
+        ItemFailed("list", SONG, "[youtube] id1: Video unavailable"),
+        ItemCompleted("list", OTHER, Path("/music/Other.mp3")),
+    ]
+
+
+def test_single_video_is_not_queued():
+    def complete(ydl: FakeYoutubeDL, url: str) -> None:
+        ydl.start_item(SONG, incomplete=True)
+        ydl.start_item(SONG)
+        ydl.finish_file("/music/Song.mp3")
+
+    assert run_download(complete, ["a"]) == [ItemCompleted("a", SONG, Path("/music/Song.mp3"))]
+
+
+def test_video_listed_twice_in_a_playlist_does_not_fail_early():
+    playlist = [OTHER, SONG, SONG]
+
+    def complete_playlist(ydl: FakeYoutubeDL, url: str) -> None:
+        ydl.match_playlist(playlist)
+        for number, item in enumerate(playlist, start=1):
+            ydl.match_entry_to_download(item, number)
+            ydl.start_item(item)
+            ydl.finish_file(f"/music/list/{item.title}.mp3")
+
+    events = run_download(complete_playlist, ["list"])
+    assert not [event for event in events if isinstance(event, ItemFailed)]
+
+
+def test_untitled_flat_entry_is_named_after_its_url():
+    def untitled_entry(ydl: FakeYoutubeDL, url: str) -> None:
+        info = {"_type": "url_transparent", "id": "42", "url": "https://sc/track/42"}
+        ydl.options["match_filter"](info, incomplete=True)
+
+    assert run_download(untitled_entry, ["set"]) == [
+        ItemQueued("set", ItemRef("42", "https://sc/track/42"))
+    ]
+
+
+def test_untitled_entry_without_url_is_named_after_its_id():
+    def untitled_entry(ydl: FakeYoutubeDL, url: str) -> None:
+        ydl.options["match_filter"]({"_type": "url", "id": "42"}, incomplete=True)
+
+    assert run_download(untitled_entry, ["set"]) == [ItemQueued("set", ItemRef("42", "42"))]
+
+
+def complete_full_entry_playlist(ydl: FakeYoutubeDL, url: str) -> None:
+    """Extractors such as Twitter list full video dicts, without `_type`, as entries."""
+    playlist = [OTHER, SONG, SONG]
+    for item in playlist:
+        ydl.options["match_filter"]({"id": item.item_id, "title": item.title}, incomplete=True)
+    for number, item in enumerate(playlist, start=1):
+        info = {"id": item.item_id, "title": item.title, "playlist_autonumber": number}
+        ydl.options["match_filter"](info, incomplete=True)
+        ydl.start_item(item)
+        ydl.finish_file(f"/music/list/{item.title}.mp3")
+
+
+def test_playlist_of_full_entries_does_not_fail_early():
+    events = run_download(complete_full_entry_playlist, ["list"])
+    assert events[:3] == [ItemQueued("list", item) for item in (OTHER, SONG, SONG)]
+    assert not [event for event in events if isinstance(event, ItemFailed)]
+
+
+def test_entry_without_id_is_ignored():
+    def entry_without_id(ydl: FakeYoutubeDL, url: str) -> None:
+        ydl.options["match_filter"]({"_type": "url", "id": None, "title": "X"}, incomplete=True)
+
+    assert run_download(entry_without_id, ["list"]) == []

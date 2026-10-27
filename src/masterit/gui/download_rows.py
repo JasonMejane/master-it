@@ -1,11 +1,21 @@
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from enum import Enum, auto
 from functools import singledispatchmethod
 
-from masterit.download.events import DownloadEvent, ItemCompleted, ItemFailed, ItemProgress
+from masterit.download.events import (
+    DownloadEvent,
+    ItemCompleted,
+    ItemFailed,
+    ItemProgress,
+    ItemQueued,
+)
+
+NOT_DOWNLOADED_MESSAGE = "Not downloaded"
 
 
 class RowStatus(Enum):
+    PENDING = auto()
     DOWNLOADING = auto()
     COMPLETED = auto()
     WARNING = auto()
@@ -28,17 +38,28 @@ class DownloadSummary:
     failed: int
 
 
-type RowKey = tuple[str, str]
+@dataclass(frozen=True)
+class Placement:
+    index: int
+    is_new: bool
 
 
-def get_row_key(event: DownloadEvent) -> RowKey | None:
-    return None if event.item is None else (event.source_url, event.item.item_id)
+@dataclass(frozen=True)
+class RowSlot:
+    """Where a row comes from; no item id marks a pasted link or a failure without item."""
+
+    source_url: str
+    item_id: str | None
+
+
+def get_slot(event: DownloadEvent) -> RowSlot:
+    return RowSlot(event.source_url, None if event.item is None else event.item.item_id)
 
 
 class DownloadRows:
     def __init__(self) -> None:
         self._rows: list[DownloadRow] = []
-        self._index_by_key: dict[RowKey, int] = {}
+        self._slots: list[RowSlot] = []
 
     @property
     def count(self) -> int:
@@ -47,19 +68,46 @@ class DownloadRows:
     def get_row(self, index: int) -> DownloadRow:
         return self._rows[index]
 
-    def is_new_row(self, event: DownloadEvent) -> bool:
-        key = get_row_key(event)
-        return key is None or key not in self._index_by_key
+    def add_links(self, urls: Iterable[str]) -> None:
+        for url in urls:
+            self._rows.append(DownloadRow(url, RowStatus.PENDING, 0.0, ""))
+            self._slots.append(RowSlot(url, None))
+
+    def find_placement(self, event: DownloadEvent) -> Placement:
+        index = self._find_item_row(get_slot(event))
+        if index is None:
+            index = self._find_link_row(event.source_url)
+        if index is None:
+            return Placement(self._get_insert_index(event.source_url), is_new=True)
+        return Placement(index, is_new=False)
+
+    def apply(self, event: DownloadEvent) -> int:
+        return self.apply_at(event, self.find_placement(event))
+
+    def apply_at(self, event: DownloadEvent, placement: Placement) -> int:
+        previous = None if placement.is_new else self._get_item_row(placement.index)
+        row = self._make_row(event, previous)
+        if placement.is_new:
+            self._rows.insert(placement.index, row)
+            self._slots.insert(placement.index, get_slot(event))
+        else:
+            self._rows[placement.index] = row
+            self._slots[placement.index] = get_slot(event)
+        return placement.index
 
     def mark_unfinished_cancelled(self) -> None:
-        self._rows = [
-            replace(row, status=RowStatus.CANCELLED) if row.status == RowStatus.DOWNLOADING else row
-            for row in self._rows
-        ]
+        unfinished = (RowStatus.PENDING, RowStatus.DOWNLOADING)
+        self._replace_rows(unfinished, lambda row: replace(row, status=RowStatus.CANCELLED))
+
+    def mark_pending_failed(self) -> None:
+        def fail(row: DownloadRow) -> DownloadRow:
+            return replace(row, status=RowStatus.FAILED, details=NOT_DOWNLOADED_MESSAGE)
+
+        self._replace_rows((RowStatus.PENDING,), fail)
 
     def clear(self) -> None:
         self._rows.clear()
-        self._index_by_key.clear()
+        self._slots.clear()
 
     def get_summary(self) -> DownloadSummary:
         statuses = [row.status for row in self._rows]
@@ -70,42 +118,54 @@ class DownloadRows:
         )
 
     @singledispatchmethod
-    def apply(self, event: DownloadEvent) -> int:
+    def _make_row(self, event: DownloadEvent, previous: DownloadRow | None) -> DownloadRow:
         raise NotImplementedError(type(event))
 
-    @apply.register
-    def _apply_progress(self, event: ItemProgress) -> int:
-        row = DownloadRow(event.item.title, RowStatus.DOWNLOADING, event.percent, "")
-        return self._upsert((event.source_url, event.item.item_id), row)
+    @_make_row.register
+    def _make_queued_row(self, event: ItemQueued, previous: DownloadRow | None) -> DownloadRow:
+        return previous or DownloadRow(event.item.title, RowStatus.PENDING, 0.0, "")
 
-    @apply.register
-    def _apply_completed(self, event: ItemCompleted) -> int:
+    @_make_row.register
+    def _make_progress_row(self, event: ItemProgress, previous: DownloadRow | None) -> DownloadRow:
+        return DownloadRow(event.item.title, RowStatus.DOWNLOADING, event.percent, "")
+
+    @_make_row.register
+    def _make_completed_row(
+        self, event: ItemCompleted, previous: DownloadRow | None
+    ) -> DownloadRow:
         status = RowStatus.WARNING if event.warnings else RowStatus.COMPLETED
         details = "; ".join(event.warnings) or str(event.file_path)
-        row = DownloadRow(event.item.title, status, 100.0, details)
-        return self._upsert((event.source_url, event.item.item_id), row)
+        return DownloadRow(event.item.title, status, 100.0, details)
 
-    @apply.register
-    def _apply_failed(self, event: ItemFailed) -> int:
-        if event.item is None:
-            return self._append(DownloadRow(event.source_url, RowStatus.FAILED, 0.0, event.message))
-        key = (event.source_url, event.item.item_id)
-        percent = self._get_percent(key)
-        row = DownloadRow(event.item.title, RowStatus.FAILED, percent, event.message)
-        return self._upsert(key, row)
+    @_make_row.register
+    def _make_failed_row(self, event: ItemFailed, previous: DownloadRow | None) -> DownloadRow:
+        title = event.source_url if event.item is None else event.item.title
+        percent = 0.0 if previous is None else previous.percent
+        return DownloadRow(title, RowStatus.FAILED, percent, event.message)
 
-    def _get_percent(self, key: RowKey) -> float:
-        index = self._index_by_key.get(key)
-        return 0.0 if index is None else self._rows[index].percent
+    def _find_item_row(self, slot: RowSlot) -> int | None:
+        if slot.item_id is None:
+            return None
+        return next((index for index, known in enumerate(self._slots) if known == slot), None)
 
-    def _upsert(self, key: RowKey, row: DownloadRow) -> int:
-        index = self._index_by_key.get(key)
-        if index is None:
-            self._index_by_key[key] = self._append(row)
-            return self._index_by_key[key]
-        self._rows[index] = row
-        return index
+    def _find_link_row(self, url: str) -> int | None:
+        link = RowSlot(url, None)
+        pending_links = (
+            index
+            for index, (slot, row) in enumerate(zip(self._slots, self._rows, strict=True))
+            if slot == link and row.status == RowStatus.PENDING
+        )
+        return next(pending_links, None)
 
-    def _append(self, row: DownloadRow) -> int:
-        self._rows.append(row)
-        return len(self._rows) - 1
+    def _get_item_row(self, index: int) -> DownloadRow | None:
+        """Row an event updates; a pasted link's row is replaced, not updated."""
+        return None if self._slots[index].item_id is None else self._rows[index]
+
+    def _get_insert_index(self, url: str) -> int:
+        indexes = [index for index, slot in enumerate(self._slots) if slot.source_url == url]
+        return indexes[-1] + 1 if indexes else len(self._slots)
+
+    def _replace_rows(
+        self, statuses: tuple[RowStatus, ...], change: Callable[[DownloadRow], DownloadRow]
+    ) -> None:
+        self._rows = [change(row) if row.status in statuses else row for row in self._rows]

@@ -10,6 +10,12 @@ class ItemRef:
 
 
 @dataclass(frozen=True)
+class ItemQueued:
+    source_url: str
+    item: ItemRef
+
+
+@dataclass(frozen=True)
 class ItemProgress:
     source_url: str
     item: ItemRef
@@ -31,5 +37,5 @@ class ItemFailed:
     message: str
 
 
-type DownloadEvent = ItemProgress | ItemCompleted | ItemFailed
+type DownloadEvent = ItemQueued | ItemProgress | ItemCompleted | ItemFailed
 type EventHandler = Callable[[DownloadEvent], None]

@@ -4,7 +4,7 @@ from typing import Any
 from yt_dlp.utils import DownloadCancelled
 
 from masterit.cancellation import CancelToken
-from masterit.download.events import EventHandler, ItemProgress, ItemRef
+from masterit.download.events import EventHandler, ItemProgress, ItemQueued, ItemRef
 from masterit.download.item_tracker import ItemOutcomeTracker
 from masterit.download.settings import AudioCodec
 
@@ -21,6 +21,11 @@ class UrlEventReporter:
 
     def match_filter(self, info: dict[str, Any], *, incomplete: bool) -> None:
         self._raise_if_cancelled()
+        if not info.get("id"):
+            return
+        if is_listed_entry(info):
+            self._on_event(ItemQueued(self._source_url, make_item_ref(info)))
+            return
         self._tracker.start_item(make_item_ref(info))
 
     def on_progress(self, status: dict[str, Any]) -> None:
@@ -58,8 +63,15 @@ class UrlEventReporter:
             raise DownloadCancelled()
 
 
+def is_listed_entry(info: dict[str, Any]) -> bool:
+    """yt-dlp matches every playlist entry raw before downloading any; it adds playlist
+    fields when processing an entry, and extractor fields once the video is resolved."""
+    return "playlist_autonumber" not in info and "extractor_key" not in info
+
+
 def make_item_ref(info: dict[str, Any]) -> ItemRef:
-    return ItemRef(str(info.get("id", "")), str(info.get("title", "")))
+    item_id = str(info.get("id", ""))
+    return ItemRef(item_id, str(info.get("title") or info.get("url") or item_id))
 
 
 def get_percent(status: dict[str, Any]) -> float:

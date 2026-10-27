@@ -82,6 +82,7 @@ class DownloadPanel(QWidget):
         settings = self._read_settings()
         self._store.save_download_settings(settings)
         self.table_model.clear()
+        self.table_model.add_links(urls)
         self._start_job(DownloadJob(self._make_downloader(settings), urls, CancelToken()))
 
     def cancel_download(self) -> None:
@@ -120,6 +121,8 @@ class DownloadPanel(QWidget):
         self._job = None
         if self._cancel_token.is_cancelled:
             self.table_model.mark_unfinished_cancelled()
+        else:
+            self.table_model.mark_pending_failed()
         self._set_running(False)
         self.status_label.setText(self._get_finish_message())
         self.download_finished.emit()

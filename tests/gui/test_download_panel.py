@@ -41,6 +41,10 @@ def make_folder_chooser(folder: str) -> Callable[..., str]:
     return choose_folder
 
 
+def get_status(panel: DownloadPanel, row: int) -> object:
+    return panel.table_model.data(panel.table_model.index(row, 1))
+
+
 def start_download(qtbot: QtBot, panel: DownloadPanel, text: str = "https://a") -> None:
     panel.url_input.setPlainText(text)
     with qtbot.waitSignal(panel.download_finished, timeout=5000):
@@ -81,8 +85,9 @@ def test_download_uses_form_settings_and_shows_results(qtbot: QtBot, tmp_path: P
     assert isinstance(downloader, RecordingDownloader)
     assert downloader.urls == ["https://a", "https://b"]
     assert downloader.settings == DownloadSettings(Path("/music/YT_DL"), AudioCodec.OPUS, "320")
-    assert panel.table_model.rowCount() == 1
-    assert panel.status_label.text() == "Finished: 1 completed, 0 with warnings, 0 failed."
+    assert panel.table_model.rowCount() == 2
+    assert panel.status_label.text() == "Finished: 1 completed, 0 with warnings, 1 failed."
+    assert get_status(panel, 1) == "Failed"
     assert panel.download_button.isEnabled()
 
 
@@ -138,6 +143,15 @@ def test_cancel_marks_unfinished_rows_cancelled(qtbot: QtBot, tmp_path: Path):
     with qtbot.waitSignal(panel.download_finished, timeout=1000):
         panel.cancel_button.click()
     assert panel.table_model.data(panel.table_model.index(0, 1)) == "Cancelled"
+
+
+def test_pasted_links_are_pending_until_they_start(qtbot: QtBot, tmp_path: Path):
+    panel = start_blocking_download(qtbot, tmp_path)
+    assert panel.table_model.rowCount() == 1
+    assert get_status(panel, 0) == "Pending"
+    with qtbot.waitSignal(panel.download_finished, timeout=1000):
+        panel.cancel_button.click()
+    assert get_status(panel, 0) == "Cancelled"
 
 
 def test_new_download_after_cancel_finishes_normally(qtbot: QtBot, tmp_path: Path):

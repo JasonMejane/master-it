@@ -4,10 +4,20 @@ from PySide6.QtCore import QModelIndex, Qt
 from PySide6.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
-from masterit.download.events import ItemCompleted, ItemFailed, ItemProgress, ItemRef
+from masterit.download.events import ItemCompleted, ItemFailed, ItemProgress, ItemQueued, ItemRef
 from masterit.gui.download_table_model import DownloadTableModel
 
 SONG = ItemRef("id1", "Song")
+
+
+def record_insertions(model: DownloadTableModel) -> list[tuple[int, int]]:
+    insertions: list[tuple[int, int]] = []
+
+    def record(parent: QModelIndex, first: int, last: int) -> None:
+        insertions.append((first, last))
+
+    model.rowsInserted.connect(record)
+    return insertions
 
 
 def get_text(model: DownloadTableModel, row: int, column: int) -> object:
@@ -104,3 +114,44 @@ def test_cancelling_empty_model_emits_nothing(qtbot: QtBot):
     model = DownloadTableModel()
     with qtbot.assertNotEmitted(model.dataChanged):
         model.mark_unfinished_cancelled()
+
+
+def test_links_are_inserted_as_pending_rows(qtbot: QtBot):
+    model = DownloadTableModel()
+    insertions = record_insertions(model)
+    model.add_links(["a", "b"])
+    assert insertions == [(0, 1)]
+    assert [get_text(model, row, 1) for row in range(2)] == ["Pending", "Pending"]
+    role = Qt.ItemDataRole.ForegroundRole
+    assert model.data(model.index(0, 0), role) == QColor(Qt.GlobalColor.gray)
+
+
+def test_no_links_insert_nothing(qtbot: QtBot):
+    model = DownloadTableModel()
+    with qtbot.assertNotEmitted(model.rowsInserted):
+        model.add_links([])
+
+
+def test_playlist_entries_are_inserted_after_their_link(qtbot: QtBot):
+    model = DownloadTableModel()
+    model.add_links(["a", "b"])
+    model.apply_event(ItemQueued("a", SONG))
+    insertions = record_insertions(model)
+    model.apply_event(ItemQueued("a", ItemRef("id2", "Other")))
+    assert insertions == [(1, 1)]
+    assert [get_text(model, row, 0) for row in range(3)] == ["Song", "Other", "b"]
+
+
+def test_pending_rows_left_at_the_end_fail(qtbot: QtBot):
+    model = DownloadTableModel()
+    model.add_links(["a"])
+    with qtbot.waitSignal(model.dataChanged):
+        model.mark_pending_failed()
+    assert get_text(model, 0, 1) == "Failed"
+    assert get_text(model, 0, 2) == "Not downloaded"
+
+
+def test_failing_pending_rows_of_empty_model_emits_nothing(qtbot: QtBot):
+    model = DownloadTableModel()
+    with qtbot.assertNotEmitted(model.dataChanged):
+        model.mark_pending_failed()
