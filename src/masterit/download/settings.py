@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+AUDIO_QUALITIES = ("128", "192", "256", "320")
+
 
 class AudioCodec(StrEnum):
     MP3 = "mp3"

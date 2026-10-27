@@ -38,6 +38,11 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
   coupling does not depend on its human log format. Reimplementing SoundTag
   (~5–7k LOC of tuned matching logic) would double maintenance; a `NativeTagger`
   can later replace the adapter behind the same protocol if needed.
+- **Window**: tabs — Download (links, output folder, format, quality, progress table) and
+  Library (Phase 3). Settings and window geometry persist via QSettings; default output
+  folder is the system Music folder + `YT_DL`. Download is disabled when ffmpeg is missing.
+- **Closing during a download**: cancels and closes once the current step ends; a second
+  close quits at once.
 - **File operations as plans**: preview → apply (undo possible later).
 - **Tooling**: uv, pytest + pytest-qt + pytest-cov (≥ 90%), ruff (complexity ≤ 3),
   pyright (strict).
@@ -58,7 +63,7 @@ src/masterit/
 
 0. Scaffold — done.
 1. Download core (yt-dlp faked in tests) — done.
-2. GUI shell + Download tab (live progress, cancel).
+2. GUI shell + Download tab (live progress, cancel) — done.
 3. Results table + rename (bulk/single, preview).
 4. Move plans + apply.
 5. Manual tag edit (bulk/single).
