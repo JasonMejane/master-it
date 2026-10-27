@@ -26,5 +26,8 @@ def read_list(payload: JsonObject, key: str) -> list[Any]:
     return cast(list[Any], value) if isinstance(value, list) else []
 
 
+# Odd items stay in place, so the first item is still the service's first answer.
 def read_objects(payload: JsonObject, key: str) -> list[JsonObject]:
-    return [cast(JsonObject, item) for item in read_list(payload, key) if isinstance(item, dict)]
+    return [
+        cast(JsonObject, item) if isinstance(item, dict) else {} for item in read_list(payload, key)
+    ]

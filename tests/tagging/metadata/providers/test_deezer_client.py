@@ -31,7 +31,7 @@ def test_returns_no_results_when_the_list_is_missing_or_odd():
     web = make_deezer_web({"/search": {}, "/search/album": {"data": [{"id": 1}, "noise"]}})
     client = make_deezer_client(web)
     assert client.search_tracks("Title") == []
-    assert client.search_albums("Title") == [{"id": 1}]
+    assert client.search_albums("Title") == [{"id": 1}, {}]
 
 
 def test_loads_each_album_its_tracks_artist_searches_and_albums_once_per_batch():

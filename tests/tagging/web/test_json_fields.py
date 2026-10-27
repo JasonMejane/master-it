@@ -44,6 +44,6 @@ def test_reads_lists_or_an_empty_one():
     assert read_list(PAYLOAD, "artist") == []
 
 
-def test_reads_only_the_objects_of_a_list():
-    assert read_objects(PAYLOAD, "data") == [{"id": 1}, {"id": 2}]
+def test_reads_odd_items_of_a_list_as_empty_objects_in_place():
+    assert read_objects(PAYLOAD, "data") == [{"id": 1}, {}, {"id": 2}]
     assert read_objects(PAYLOAD, "missing") == []
