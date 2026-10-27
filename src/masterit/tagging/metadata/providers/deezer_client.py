@@ -1,5 +1,3 @@
-import urllib.parse
-
 from masterit.tagging.metadata.track_metadata import make_optional_text
 from masterit.tagging.metadata.types import ProviderServices
 from masterit.tagging.web.errors import ServiceError
@@ -8,6 +6,7 @@ from masterit.tagging.web.json_fields import read_object, read_objects, read_tex
 from masterit.tagging.web.json_response import JsonObject, read_json
 from masterit.tagging.web.rate_limiter import RateLimiter
 from masterit.tagging.web.transport import HttpRequest
+from masterit.tagging.web.url_text import encode_query
 
 DEEZER_API_URL = "https://api.deezer.com/"
 DEEZER_REQUEST_INTERVAL = 0.5
@@ -18,7 +17,7 @@ COVER_SIZES = ("cover_xl", "cover_big")
 
 
 def build_deezer_url(path: str, params: dict[str, str]) -> str:
-    query = f"?{urllib.parse.urlencode(params)}" if params else ""
+    query = f"?{encode_query(params)}" if params else ""
     return f"{DEEZER_API_URL}{path}{query}"
 
 

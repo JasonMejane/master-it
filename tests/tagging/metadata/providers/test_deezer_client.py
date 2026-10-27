@@ -104,3 +104,9 @@ def test_cover_requests_prefer_the_largest_cover_and_skip_missing_sizes():
 def test_query_joins_the_known_search_terms():
     assert build_query(["", "Title"]) == "Title"
     assert build_query(["Artist", "Title"]) == "Artist Title"
+
+
+def test_searches_with_half_an_emoji():
+    web = make_deezer_web({})
+    make_deezer_client(web).search_tracks("Song \ud83d")
+    assert web.requested == ["/search?q=Song+%EF%BF%BD&limit=5"]

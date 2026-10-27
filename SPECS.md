@@ -101,7 +101,7 @@ src/masterit/
 
 ## Roadmap
 
-Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7c, 7d Deezer done).
+Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7c, 7d Deezer and MusicBrainz/ListenBrainz done).
 
 0. Scaffold — done (`ba9e9c7`).
 1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
@@ -123,7 +123,7 @@ Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7c, 7d Deezer 
    b. `tagging/paths/`: file-name parser, folder context, library path, album plan — done.
    c. `tagging/metadata/`: track matching, merge helpers, tracklist, metadata chain — done.
    d. `tagging/metadata/providers/`, one commit per service: Deezer (track and cover) — done;
-      MusicBrainz/ListenBrainz; Discogs; iTunes, Last.fm, YouTube cover. Odd JSON fields read
+      MusicBrainz/ListenBrainz — done; Discogs; iTunes, Last.fm, YouTube cover. Odd JSON fields read
       as missing (`web/json_fields.py`), as SoundTag's optional chaining does.
    e. Album sources (`*-album`) and resolver, album tagging.
    f. Processing (write policy), `NativeTagger`, settings dialog, adapter removed. File names
@@ -154,5 +154,7 @@ Known limits:
 - The native tagger's name parsing follows SoundTag's JavaScript rules, except for rare
   whitespace (byte order mark, `\x1c`–`\x1f`, `\x85`) inside names, and its one-typo
   tolerance counts letters outside the Basic Multilingual Plane as one character, not two.
+- Native tagger, MusicBrainz: a request that times out, even while its answer downloads, is
+  asked once more (SoundTag only retries a timeout before the answer starts).
 - Layout on case-insensitive drives: an artist folder existing with another casing is
   reused, but the file is not seen as in place on later repacks.
