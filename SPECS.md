@@ -101,7 +101,7 @@ src/masterit/
 
 ## Roadmap
 
-Status (2026-10-27): phases 0–6 done; next is phase 7 (optional).
+Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a done).
 
 0. Scaffold — done (`ba9e9c7`).
 1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
@@ -114,7 +114,17 @@ Status (2026-10-27): phases 0–6 done; next is phase 7 (optional).
    sources per run and `--json` events. SoundTag runs with `--overwrite`: yt-dlp already
    writes title, artist, year, genre and cover, so it would otherwise skip downloads.
    The library layout is another destination maker of the relocation engine.
-7. Optional: native Python tagger.
+7. Native Python tagger: port SoundTag (`3e4899f`, without CLI/TUI) into `tagging/`, then
+   replace `SoundTagCliTagger`. Overwrite mode only (what MasterIt uses); API keys in a
+   settings dialog (QSettings); stdlib urllib behind an injectable `HttpTransport`; a failed
+   file reports its reason, no timed lookup log. Synchronous: files run one at a time in
+   the worker thread. One commit per step:
+   a. `tagging/web/`: HTTP transport (http(s) only), JSON/image reads, rate limiter, caches — done.
+   b. Library paths: file-name parser, folder context, library path, album plan.
+   c. Matching and merge: track matching, track metadata, metadata chain.
+   d. Providers: Deezer, MusicBrainz/ListenBrainz, Discogs, iTunes, Last.fm, YouTube cover.
+   e. Album resolver and album tagging.
+   f. Processing (write policy), `NativeTagger`, settings dialog, adapter removed.
 
 Known limits:
 - A same-drive rename/move can overwrite a file created at the target in the instant
@@ -135,5 +145,8 @@ Known limits:
   (CTRL_BREAK).
 - Windows: `soundtag` is an npm `.cmd` wrapper run through cmd.exe, where file names with
   `&`, `%` or `^` can break the command line (not handled yet; Linux is the target).
+- Auto-tag requests: the timeout bounds each socket operation and is checked again once
+  headers and each body chunk arrive, so a stalling service can exceed it by one socket
+  timeout; DNS lookups are not bounded.
 - Layout on case-insensitive drives: an artist folder existing with another casing is
   reused, but the file is not seen as in place on later repacks.
