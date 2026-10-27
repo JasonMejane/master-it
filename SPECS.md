@@ -101,7 +101,7 @@ src/masterit/
 
 ## Roadmap
 
-Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a done).
+Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7b done).
 
 0. Scaffold — done (`ba9e9c7`).
 1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
@@ -120,7 +120,7 @@ Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a done).
    file reports its reason, no timed lookup log. Synchronous: files run one at a time in
    the worker thread. One commit per step:
    a. `tagging/web/`: HTTP transport (http(s) only), JSON/image reads, rate limiter, caches — done.
-   b. Library paths: file-name parser, folder context, library path, album plan.
+   b. `tagging/paths/`: file-name parser, folder context, library path, album plan — done.
    c. Matching and merge: track matching, track metadata, metadata chain.
    d. Providers: Deezer, MusicBrainz/ListenBrainz, Discogs, iTunes, Last.fm, YouTube cover.
    e. Album resolver and album tagging.
@@ -148,5 +148,7 @@ Known limits:
 - Auto-tag requests: the timeout bounds each socket operation and is checked again once
   headers and each body chunk arrive, so a stalling service can exceed it by one socket
   timeout; DNS lookups are not bounded.
+- The native tagger's name parsing follows SoundTag's JavaScript rules, except for rare
+  whitespace (byte order mark, `\x1c`–`\x1f`, `\x85`) inside folder names.
 - Layout on case-insensitive drives: an artist folder existing with another casing is
   reused, but the file is not seen as in place on later repacks.
