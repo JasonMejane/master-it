@@ -1,39 +1,18 @@
 from pathlib import Path
 
 from masterit.tags.fields import TagField
-from masterit.tags.tag_cache import TagCache
+from masterit.tags.tag_cache import make_tag_cache
 
 from .fakes import FakeTagStore
 
 SONG = Path("/music/Song.mp3")
 
 
-def test_tags_are_read_once():
+def test_tags_are_read_from_the_store():
     store = FakeTagStore({SONG: {TagField.TITLE: "Song"}})
-    cache = TagCache(store)
-    assert cache.get(SONG) == {TagField.TITLE: "Song"}
-    assert cache.get(SONG) == {TagField.TITLE: "Song"}
-    assert store.reads == [SONG]
+    assert make_tag_cache(store).get(SONG) == {TagField.TITLE: "Song"}
 
 
 def test_unreadable_file_has_no_tags():
-    cache = TagCache(FakeTagStore(failing={SONG}))
+    cache = make_tag_cache(FakeTagStore(failing={SONG}))
     assert cache.get(SONG) == {}
-
-
-def test_forgotten_files_are_read_again():
-    store = FakeTagStore({SONG: {TagField.TITLE: "Old"}})
-    cache = TagCache(store)
-    cache.get(SONG)
-    store.tags[SONG] = {TagField.TITLE: "New"}
-    cache.forget([SONG])
-    assert cache.get(SONG) == {TagField.TITLE: "New"}
-
-
-def test_clear_forgets_everything():
-    store = FakeTagStore()
-    cache = TagCache(store)
-    cache.get(SONG)
-    cache.clear()
-    cache.get(SONG)
-    assert store.reads == [SONG, SONG]

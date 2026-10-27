@@ -20,7 +20,7 @@ from masterit.tags.fields import TagField, Tags
 from masterit.tags.tag_edits import TagOutcome
 from masterit.tags.tag_store import TagStore
 
-from ..tags.fakes import FakeTagStore
+from ..tags.fakes import FakeCoverStore, FakeTagStore
 from .fakes import BlockingDownloader, make_panel, make_store
 from .library_helpers import FakeRootStore, choose, confirm_always, select_rows
 from .test_auto_tag_action import FakeTagger
@@ -58,6 +58,7 @@ def make_library(tmp_path: Path, tagger: Tagger | None = None) -> LibraryPanel:
         is_downloading=lambda: False,
         thread_pool=QThreadPool(),
         tag_store=FakeTagStore(),
+        cover_store=FakeCoverStore(),
         root_store=FakeRootStore(),
         tagger=tagger,
         confirm_move=confirm_always,

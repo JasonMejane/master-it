@@ -9,11 +9,18 @@ from mutagen.oggflac import OggFLAC
 from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 
+from masterit.tags.easy_keys import register_easy_keys
 from masterit.tags.fields import TagField, Tags
 
 # Formats whose tags use the shared easy keys; others (e.g. WAV's raw ID3) are refused.
 SUPPORTED_AUDIO = (EasyMP3, EasyMP4, FLAC, OggFLAC, OggOpus, OggVorbis)
 VALUE_SEPARATOR = "; "
+# yt-dlp stores the video URL as comment and its description beside it; Vorbis files only
+# get the description keys, hence the fallback.
+READ_KEYS = {TagField.COMMENT: ("comment", "description")}
+REMOVED_KEYS = {TagField.COMMENT: ("comment", "description", "synopsis", "purl")}
+
+register_easy_keys()
 
 
 class TagError(Exception):
@@ -29,7 +36,7 @@ class TagStore(Protocol):
 class MutagenTagStore:
     def read(self, path: Path) -> Tags:
         audio = open_audio(path)
-        values = {field: audio.get(field.value) for field in TagField}
+        values = {field: get_values(audio, field) for field in TagField}
         return {field: VALUE_SEPARATOR.join(value) for field, value in values.items() if value}
 
     def write(self, path: Path, changes: Tags) -> None:
@@ -73,8 +80,14 @@ def load_audio(path: Path) -> EasyAudio:
     return cast(EasyAudio, audio)
 
 
+def get_values(audio: EasyAudio, field: TagField) -> list[str] | None:
+    keys = READ_KEYS.get(field, (field.value,))
+    return next((values for key in keys if (values := audio.get(key))), None)
+
+
 def set_tag(audio: EasyAudio, field: TagField, value: str) -> None:
     if value:
         audio[field.value] = [value]
-    else:
-        audio.pop(field.value, None)
+        return
+    for key in REMOVED_KEYS.get(field, (field.value,)):
+        audio.pop(key, None)

@@ -25,6 +25,7 @@ STORED_TAGS = {
 TITLE_COLUMN = 3
 ARTIST_COLUMN = 4
 GENRE_COLUMN = 8
+COMMENT_COLUMN = 10
 
 
 def make_tag_panel(qtbot: QtBot, store: FakeTagStore | None = None) -> LibraryPanel:
@@ -213,14 +214,25 @@ def test_field_back_to_loaded_value_is_not_an_edit(qtbot: QtBot):
     assert not panel.tag_form.reset_button.isEnabled()
 
 
-def test_clear_action_is_offered_for_mixed_fields_only(qtbot: QtBot):
+def test_clear_action_is_offered_for_fields_with_a_value(qtbot: QtBot):
     panel = make_tag_panel(qtbot)
     select_rows(panel, 0, 1)
     assert panel.tag_form.clear_actions[TagField.TITLE].isVisible()
-    assert not panel.tag_form.clear_actions[TagField.ARTIST].isVisible()
-    panel.table_view.clearSelection()
+    assert panel.tag_form.clear_actions[TagField.ARTIST].isVisible()
+    assert not panel.tag_form.clear_actions[TagField.GENRE].isVisible()
+
+
+def test_clear_action_removes_shared_comment(qtbot: QtBot):
+    store = FakeTagStore({SONG_A: {TagField.COMMENT: "https://youtu.be/x"}})
+    panel = make_tag_panel(qtbot, store)
     select_rows(panel, 0)
-    assert not panel.tag_form.clear_actions[TagField.TITLE].isVisible()
+    panel.tag_form.clear_actions[TagField.COMMENT].trigger()
+    comment_input = panel.tag_form.field_inputs[TagField.COMMENT]
+    assert comment_input.text() == ""
+    assert comment_input.placeholderText() == "<removed>"
+    assert get_cell(panel, 0, COMMENT_COLUMN) == ""
+    apply_tags(qtbot, panel)
+    assert store.tags[SONG_A][TagField.COMMENT] == ""
 
 
 def test_clear_action_removes_mixed_field_from_all_selected(qtbot: QtBot):
@@ -288,3 +300,14 @@ def test_cleared_field_stays_removed_after_typing_and_deleting(qtbot: QtBot):
     type_tag(panel, TagField.TITLE, "")
     assert panel.tag_form.field_inputs[TagField.TITLE].placeholderText() == "<removed>"
     assert panel.tag_form.apply_button.isEnabled()
+
+
+def test_finished_download_keeps_pending_edits(qtbot: QtBot):
+    store = FakeTagStore(STORED_TAGS)
+    panel = make_tag_panel(qtbot, store)
+    select_rows(panel, 0)
+    type_tag(panel, TagField.GENRE, "Rock")
+    store.tags[SONG_B] = {TagField.TITLE: "New"}
+    panel.add_downloaded_file(SONG_B)
+    assert get_input_text(panel, TagField.GENRE) == "Rock"
+    assert get_cell(panel, 1, TITLE_COLUMN) == "New"

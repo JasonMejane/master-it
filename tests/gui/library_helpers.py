@@ -12,9 +12,10 @@ from masterit.gui.move_action import MoveConfirmation
 from masterit.library.relocation import RelocationPlan
 from masterit.repack.pipeline import RepackPlan
 from masterit.tagging.tagger import Tagger
+from masterit.tags.cover_store import CoverStore
 from masterit.tags.tag_store import TagStore
 
-from ..tags.fakes import FakeTagStore
+from ..tags.fakes import FakeCoverStore, FakeTagStore
 
 
 def confirm_always(parent: QWidget, plan: RelocationPlan, folder: Path) -> bool:
@@ -52,12 +53,14 @@ def make_panel(
     tag_store: TagStore | None = None,
     tagger: Tagger | None = None,
     root_store: FakeRootStore | None = None,
+    cover_store: CoverStore | None = None,
 ) -> LibraryPanel:
     services = LibraryServices(
         get_download_folder=lambda: download_folder,
         is_downloading=is_downloading,
         thread_pool=QThreadPool(),
         tag_store=tag_store or FakeTagStore(),
+        cover_store=cover_store or FakeCoverStore(),
         root_store=root_store or FakeRootStore(),
         tagger=tagger,
         confirm_move=confirm_move,

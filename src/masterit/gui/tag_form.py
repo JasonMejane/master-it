@@ -25,9 +25,9 @@ REMOVED_PLACEHOLDER = "<removed>"
 
 
 def get_placeholder(shared_value: str | None, edit: str | None) -> str:
-    if shared_value is not None:
-        return ""
-    return REMOVED_PLACEHOLDER if edit == "" else MIXED_PLACEHOLDER
+    if edit == "":
+        return REMOVED_PLACEHOLDER
+    return MIXED_PLACEHOLDER if shared_value is None else ""
 
 
 class TagForm(QWidget):
@@ -98,7 +98,7 @@ class TagForm(QWidget):
         shared_value = self._shared[field]
         placeholder = get_placeholder(shared_value, self._edits.get(field))
         self.field_inputs[field].setPlaceholderText(placeholder)
-        self.clear_actions[field].setVisible(shared_value is None)
+        self.clear_actions[field].setVisible(shared_value != "")
 
     def _update_preview(self) -> None:
         self._context.show_tag_preview(self._context.get_selected_paths(), self._edits)

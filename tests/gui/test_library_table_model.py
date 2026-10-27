@@ -8,7 +8,7 @@ from pytestqt.qtbot import QtBot
 from masterit.gui.library_table_model import LibraryTableModel
 from masterit.library.relocation import Relocation, RelocationPlan, RelocationProblem
 from masterit.tags.fields import TagField
-from masterit.tags.tag_cache import TagCache
+from masterit.tags.tag_cache import make_tag_cache
 
 from ..tags.fakes import FakeTagStore
 
@@ -18,7 +18,7 @@ OTHER = ROOT / "Other.mp3"
 
 
 def make_model(root: Path | None = ROOT, store: FakeTagStore | None = None) -> LibraryTableModel:
-    model = LibraryTableModel(TagCache(store or FakeTagStore()))
+    model = LibraryTableModel(make_tag_cache(store or FakeTagStore()))
     model.set_files([SONG, OTHER], root)
     return model
 
@@ -32,7 +32,7 @@ def get_tag_texts(model: LibraryTableModel, row: int) -> list[object]:
 
 
 def test_headers():
-    model = LibraryTableModel(TagCache(FakeTagStore()))
+    model = LibraryTableModel(make_tag_cache(FakeTagStore()))
     columns = range(model.columnCount())
     headers = [model.headerData(column, Qt.Orientation.Horizontal) for column in columns]
     assert headers == [
@@ -46,6 +46,7 @@ def test_headers():
         "Year",
         "Genre",
         "Track",
+        "Comment",
         "Auto-tag",
     ]
     assert model.headerData(0, Qt.Orientation.Vertical) is None
@@ -126,7 +127,7 @@ def test_invalid_index_and_child_counts():
 
 
 def test_preview_on_empty_model_emits_nothing(qtbot: QtBot):
-    model = LibraryTableModel(TagCache(FakeTagStore()))
+    model = LibraryTableModel(make_tag_cache(FakeTagStore()))
     with qtbot.assertNotEmitted(model.dataChanged):
         model.set_preview(RelocationPlan(()))
 
@@ -138,7 +139,7 @@ def test_get_files_returns_listed_files():
 def test_folder_is_relative_through_symlinked_root(tmp_path: Path):
     (tmp_path / "real/list").mkdir(parents=True)
     (tmp_path / "link").symlink_to(tmp_path / "real")
-    model = LibraryTableModel(TagCache(FakeTagStore()))
+    model = LibraryTableModel(make_tag_cache(FakeTagStore()))
     model.set_files([tmp_path / "real/list/Song.mp3"], tmp_path / "link")
     assert model.data(model.index(0, 2)) == "list"
 
@@ -146,7 +147,7 @@ def test_folder_is_relative_through_symlinked_root(tmp_path: Path):
 def test_folder_text_is_computed_once_not_on_every_paint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    model = LibraryTableModel(TagCache(FakeTagStore()))
+    model = LibraryTableModel(make_tag_cache(FakeTagStore()))
     model.set_files([tmp_path / "list/Song.mp3"], tmp_path)
     model.append_file(tmp_path / "Other.mp3")
 
@@ -214,7 +215,7 @@ def test_tags_of_a_file_are_shared_for_selection():
     assert model.get_tags(SONG) == TAGGED_STORE_TAGS[SONG]
 
 
-AUTO_TAG_COLUMN = 10
+AUTO_TAG_COLUMN = 11
 
 
 def test_auto_tag_statuses_show_per_file_and_survive_new_files(qtbot: QtBot):
@@ -229,7 +230,7 @@ def test_auto_tag_statuses_show_per_file_and_survive_new_files(qtbot: QtBot):
 
 
 def test_auto_tag_statuses_on_empty_model_emit_nothing(qtbot: QtBot):
-    model = LibraryTableModel(TagCache(FakeTagStore()))
+    model = LibraryTableModel(make_tag_cache(FakeTagStore()))
     with qtbot.assertNotEmitted(model.dataChanged):
         model.set_auto_tag_statuses({SONG: "pending"})
 

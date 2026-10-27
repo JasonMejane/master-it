@@ -10,6 +10,7 @@ class TagField(StrEnum):
     YEAR = "date"
     GENRE = "genre"
     TRACK = "tracknumber"
+    COMMENT = "comment"
 
 
 type Tags = dict[TagField, str]

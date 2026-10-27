@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from masterit.gui.auto_tag_action import AutoTagAction
+from masterit.gui.cover_view import CoverView
 from masterit.gui.library_services import LibraryServices
 from masterit.gui.library_source import LibrarySource
 from masterit.gui.library_table_model import LibraryTableModel
@@ -27,7 +28,7 @@ from masterit.library.relocation import (
     replace_relocated_paths,
 )
 from masterit.tags.fields import Tags
-from masterit.tags.tag_cache import TagCache
+from masterit.tags.tag_cache import TagCache, make_tag_cache
 from masterit.tags.tag_edits import TagOutcome
 
 
@@ -37,7 +38,7 @@ class LibraryPanel(QWidget):
     def __init__(self, services: LibraryServices) -> None:
         super().__init__()
         self._source = LibrarySource()
-        self._build_table(TagCache(services.tag_store))
+        self._build_table(make_tag_cache(services.tag_store))
         self.status_label = QLabel()
         self.source_bar = SourceBar()
         self.rename_bar = RenameBar(self)
@@ -49,6 +50,7 @@ class LibraryPanel(QWidget):
             services.confirm_move,
         )
         self.tag_form = TagForm(self, services.tag_store, services.thread_pool)
+        self.cover_view = CoverView(self, services.cover_store)
         self.auto_tag_action = AutoTagAction(self, services)
         self._build_layout()
         self._connect_signals()
@@ -69,6 +71,11 @@ class LibraryPanel(QWidget):
     def add_downloaded_file(self, path: Path) -> None:
         if self._source.add_download(path):
             self.table_model.append_file(path)
+            return
+        # A download may overwrite a listed file; refreshing the form would drop pending edits.
+        self.table_model.refresh_tags([path])
+        self.cover_view.forget([path])
+        self.cover_view.load_selection()
 
     def open_folder(self, folder: Path) -> None:
         self._source.open_folder(folder)
@@ -110,12 +117,16 @@ class LibraryPanel(QWidget):
         self.table_model.set_auto_tag_statuses(statuses)
 
     def refresh_tags(self, paths: Iterable[Path]) -> None:
-        self.table_model.refresh_tags(paths)
+        refreshed = list(paths)
+        self.table_model.refresh_tags(refreshed)
+        self.cover_view.forget(refreshed)
         self.tag_form.load_selection()
+        self.cover_view.load_selection()
 
     def _refresh_selection_views(self) -> None:
         self.rename_bar.refresh_preview()
         self.tag_form.load_selection()
+        self.cover_view.load_selection()
 
     def _set_busy(self, busy: bool) -> None:
         widgets = (self.source_bar, self.move_action, self.rename_bar, self.tag_form)
@@ -144,9 +155,13 @@ class LibraryPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.addLayout(top_row)
         layout.addWidget(self.auto_tag_action)
+        side_column = QVBoxLayout()
+        side_column.addWidget(self.cover_view, alignment=Qt.AlignmentFlag.AlignHCenter)
+        side_column.addWidget(self.tag_form)
+        side_column.addStretch()
         content_row = QHBoxLayout()
         content_row.addWidget(self.table_view, stretch=1)
-        content_row.addWidget(self.tag_form)
+        content_row.addLayout(side_column)
         layout.addLayout(content_row, stretch=1)
         layout.addWidget(self.rename_bar)
         layout.addWidget(self.status_label)
@@ -155,6 +170,7 @@ class LibraryPanel(QWidget):
         self.source_bar.folder_chosen.connect(self.open_folder)
         self.source_bar.session_requested.connect(self.show_session)
         self.table_view.selectionModel().selectionChanged.connect(self._refresh_selection_views)
+        self.table_model.modelReset.connect(self.cover_view.clear_cache)
         for action in (self.move_action, self.tag_form, self.auto_tag_action):
             action.started.connect(lambda: self._set_busy(True))
             action.finished.connect(lambda: self._set_busy(False))

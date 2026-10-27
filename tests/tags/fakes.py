@@ -20,3 +20,18 @@ class FakeTagStore:
         if path in self.failing:
             raise TagError("read-only")
         self.tags[path] = {**self.tags.get(path, {}), **changes}
+
+
+class FakeCoverStore:
+    def __init__(
+        self, covers: dict[Path, bytes] | None = None, failing: set[Path] | None = None
+    ) -> None:
+        self.covers = dict(covers or {})
+        self.reads: list[Path] = []
+        self.failing = failing or set()
+
+    def read(self, path: Path) -> bytes | None:
+        self.reads.append(path)
+        if path in self.failing:
+            raise TagError("unreadable")
+        return self.covers.get(path)

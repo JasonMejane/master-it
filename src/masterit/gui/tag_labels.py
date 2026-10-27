@@ -8,4 +8,5 @@ TAG_LABELS = {
     TagField.YEAR: "Year",
     TagField.GENRE: "Genre",
     TagField.TRACK: "Track",
+    TagField.COMMENT: "Comment",
 }

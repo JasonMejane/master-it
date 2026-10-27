@@ -14,6 +14,7 @@ from masterit.gui.settings_store import SettingsStore
 from masterit.tagging.soundtag_cli import SoundTagCliTagger
 from masterit.tagging.subprocess_process import start_subprocess
 from masterit.tagging.tagger import Tagger
+from masterit.tags.cover_store import MutagenCoverStore
 from masterit.tags.tag_store import MutagenTagStore
 
 
@@ -99,6 +100,7 @@ def make_main_window(settings: QSettings) -> MainWindow:
         is_downloading=lambda: download_panel.is_running,
         thread_pool=thread_pool,
         tag_store=MutagenTagStore(),
+        cover_store=MutagenCoverStore(),
         root_store=store,
         tagger=make_soundtag_tagger(),
     )

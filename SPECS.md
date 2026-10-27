@@ -38,14 +38,18 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
   download folder in session view), never the download folder itself nor its content while a
   download runs. Closing waits for a running move.
 - **Manual tags**: form beside the Library table edits Title, Artist, Album, Album artist,
-  Year, Genre and Track of the selected files (mp3 as ID3v2.4, flac/opus/ogg Vorbis
+  Year, Genre, Track and Comment of the selected files (mp3 as ID3v2.4, flac/opus/ogg Vorbis
   comments, m4a atoms; wav refused per file). Values shared by the selection are shown,
-  differing ones as "<multiple values>" with a clear action removing the field from all;
-  multi-value tags show joined by "; ". Only edited fields are written (a field typed back
+  differing ones as "<multiple values>"; a clear action on any field with a value removes it
+  from all; multi-value tags show joined by "; ". Comment falls back to the description
+  (in yt-dlp Vorbis files: the URL then the whole video description); removing it also
+  removes the description, synopsis and purl keys, even when hidden behind a comment. Only edited fields are written (a field typed back
   to its loaded text is no edit), an emptied field removes the tag. Edits preview in the
   table's tag columns, are discarded on selection change, and are refused for malformed
   Year (`2024[-05[-17]]`) or Track (`3[/12]`, 1–9999); problems show inside the form.
   Writes run in the background like moves; closing waits for them.
+- **Cover**: read-only view above the tag form showing the selection's embedded cover (front
+  cover preferred); "<multiple covers>" when they differ, "No cover" when there is none.
 - **Auto-tag**: "Auto-tag selected" runs `soundtag --json --overwrite <files>` in the
   background; an "Auto-tag" column shows each file's status for the session (pending,
   tagged, skipped, failed, stopped) and tag columns refresh. Cancel stops SoundTag after
@@ -113,7 +117,8 @@ Known limits:
 - A same-drive rename/move can overwrite a file created at the target in the instant
   between the check and the rename (no portable no-replace rename on FAT/exFAT).
 - Rename chains (b → ab while ab moves too) are refused rather than ordered.
-- Selecting files reads their tags on the GUI thread (cached); a huge selection may stall.
+- Selecting files reads their tags and covers on the GUI thread (cached); a huge selection
+  may stall.
 - Editing a multi-value tag writes the typed text as a single value; the layout uses it
   joined ("A; B") as the artist folder.
 - SoundTag reports no reason for a failed file in its JSON events (it stays in its log).

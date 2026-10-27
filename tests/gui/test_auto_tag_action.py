@@ -20,7 +20,7 @@ from masterit.tags.fields import TagField
 from ..tags.fakes import FakeTagStore
 from .library_helpers import FakeRootStore, choose, make_files, make_panel, select_rows
 
-AUTO_TAG_COLUMN = 10
+AUTO_TAG_COLUMN = 11
 GENRE_COLUMN = 8
 
 
