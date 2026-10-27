@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from masterit.gui import move_job
 from masterit.gui.move_job import MoveJob
+from masterit.library import move_work
 from masterit.library.destinations import make_move_destination
 from masterit.library.relocation import RelocationOutcome, RelocationPlan, make_relocation_plan
 
@@ -56,7 +56,7 @@ def test_job_reports_crash_then_finishes(tmp_path: Path, monkeypatch: pytest.Mon
     def crash(source: Path, target: Path) -> RelocationOutcome:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(move_job, "relocate_file", crash)
+    monkeypatch.setattr(move_work, "relocate_file", crash)
     assert run_job(make_job(tmp_path, tmp_path)) == ["boom", []]
 
 

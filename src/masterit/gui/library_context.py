@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Protocol
 
@@ -33,3 +33,11 @@ class TagContext(LibraryContext, Protocol):
     def show_tag_preview(self, paths: Iterable[Path], edits: Tags) -> None: ...
 
     def finish_tagging(self, paths: list[Path], outcomes: list[TagOutcome]) -> None: ...
+
+
+class AutoTagContext(RelocationContext, Protocol):
+    def get_tags(self, path: Path) -> Tags: ...
+
+    def show_auto_tag_statuses(self, statuses: Mapping[Path, str]) -> None: ...
+
+    def refresh_tags(self, paths: Iterable[Path]) -> None: ...

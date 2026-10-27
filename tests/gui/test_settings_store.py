@@ -54,3 +54,12 @@ def test_window_geometry_is_written_to_disk_at_once(tmp_path: Path):
     store = make_store(tmp_path)
     store.save_window_geometry(QByteArray(b"geometry"))
     assert "geometry" in (tmp_path / "test.conf").read_text()
+
+
+def test_library_root_is_unset_by_default(tmp_path: Path):
+    assert make_store(tmp_path).load_library_root() is None
+
+
+def test_saved_library_root_is_loaded_back(tmp_path: Path):
+    make_store(tmp_path).save_library_root(Path("/music/Library, Main"))
+    assert make_store(tmp_path).load_library_root() == Path("/music/Library, Main")

@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, override
 
@@ -20,10 +20,12 @@ type Index = QModelIndex | QPersistentModelIndex
 
 FILE_HEADERS = ("Name", "New name", "Folder")
 TAG_COLUMNS = tuple(TagField)
-HEADERS = FILE_HEADERS + tuple(TAG_LABELS[field] for field in TAG_COLUMNS)
+TAG_HEADERS = tuple(TAG_LABELS[field] for field in TAG_COLUMNS)
+HEADERS = (*FILE_HEADERS, *TAG_HEADERS, "Auto-tag")
 NAME_COLUMN = 0
 PREVIEW_COLUMN = 1
 FIRST_TAG_COLUMN = len(FILE_HEADERS)
+AUTO_TAG_COLUMN = FIRST_TAG_COLUMN + len(TAG_COLUMNS)
 ROOT = QModelIndex()
 PROBLEM_COLOR = QColor(Qt.GlobalColor.red)
 PENDING_COLOR = QColor(Qt.GlobalColor.blue)
@@ -36,7 +38,8 @@ def get_preview_text(entry: Relocation | None) -> str:
 
 
 def get_tag_field(column: int) -> TagField | None:
-    return TAG_COLUMNS[column - FIRST_TAG_COLUMN] if column >= FIRST_TAG_COLUMN else None
+    is_tag_column = FIRST_TAG_COLUMN <= column < AUTO_TAG_COLUMN
+    return TAG_COLUMNS[column - FIRST_TAG_COLUMN] if is_tag_column else None
 
 
 def describe_folder(path: Path, resolved_root: Path | None) -> str:
@@ -54,6 +57,8 @@ class LibraryTableModel(QAbstractTableModel):
         self._tag_cache = tag_cache
         self._tag_preview_paths: set[Path] = set()
         self._tag_edits: Tags = {}
+        # Kept across reloads: it reports this session's runs, keyed by the files' final paths.
+        self._auto_tag_statuses: dict[Path, str] = {}
         self._files: list[Path] = []
         self._root: Path | None = None
         self._folder_texts: dict[Path, str] = {}
@@ -100,6 +105,10 @@ class LibraryTableModel(QAbstractTableModel):
 
     def refresh_tags(self, paths: Iterable[Path]) -> None:
         self._tag_cache.forget(paths)
+        self._emit_tags_changed()
+
+    def set_auto_tag_statuses(self, statuses: Mapping[Path, str]) -> None:
+        self._auto_tag_statuses.update(statuses)
         self._emit_tags_changed()
 
     def _emit_tags_changed(self) -> None:
@@ -159,6 +168,8 @@ class LibraryTableModel(QAbstractTableModel):
         field = get_tag_field(column)
         if field is not None:
             return self._get_tag_text(path, field)
+        if column == AUTO_TAG_COLUMN:
+            return self._auto_tag_statuses.get(path, "")
         texts = (path.name, get_preview_text(self._preview.get(path)), self._folder_texts[path])
         return texts[column]
 

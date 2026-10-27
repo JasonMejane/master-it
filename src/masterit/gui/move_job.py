@@ -3,13 +3,8 @@ from typing import override
 
 from PySide6.QtCore import QObject, QRunnable, Signal
 
-from masterit.library.relocation import (
-    FolderCheck,
-    RelocationOutcome,
-    RelocationPlan,
-    relocate_file,
-    remove_emptied_folders,
-)
+from masterit.library.move_work import MoveWork
+from masterit.library.relocation import FolderCheck, RelocationPlan
 
 
 class MoveSignals(QObject):
@@ -24,27 +19,13 @@ class MoveJob(QRunnable):
     ) -> None:
         super().__init__()
         self.signals = MoveSignals()
-        self._plan = plan
-        self._cleanup_boundary = cleanup_boundary
-        self._is_protected = is_protected
-        self._outcomes: list[RelocationOutcome] = []
+        self._work = MoveWork(plan, cleanup_boundary, is_protected)
 
     @override
     def run(self) -> None:
         try:
-            self._move_files()
-            self._clean_up()
+            self._work.run(self.signals.progress.emit)
         except Exception as error:
             self.signals.crashed.emit(str(error))
         finally:
-            self.signals.finished.emit(self._outcomes)
-
-    def _move_files(self) -> None:
-        entries = self._plan.valid_entries
-        for done, entry in enumerate(entries, start=1):
-            self._outcomes.append(relocate_file(entry.source, entry.target))
-            self.signals.progress.emit(done, len(entries))
-
-    def _clean_up(self) -> None:
-        if self._cleanup_boundary is not None:
-            remove_emptied_folders(self._outcomes, self._cleanup_boundary, self._is_protected)
+            self.signals.finished.emit(self._work.outcomes)

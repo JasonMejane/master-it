@@ -7,18 +7,23 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog
 from pytestqt.qtbot import QtBot
 
-from masterit.gui import move_job, tag_job
+from masterit.gui import main_window, tag_job
 from masterit.gui.library_panel import LibraryPanel
-from masterit.gui.main_window import MainWindow, make_main_window
+from masterit.gui.library_services import LibraryServices
+from masterit.gui.main_window import MainWindow, make_main_window, make_soundtag_tagger
 from masterit.gui.settings_store import SettingsStore
+from masterit.library import move_work
 from masterit.library.relocation import RelocationOutcome
+from masterit.tagging.soundtag_cli import SoundTagCliTagger
+from masterit.tagging.tagger import Tagger
 from masterit.tags.fields import TagField, Tags
 from masterit.tags.tag_edits import TagOutcome
 from masterit.tags.tag_store import TagStore
 
 from ..tags.fakes import FakeTagStore
 from .fakes import BlockingDownloader, make_panel, make_store
-from .library_helpers import choose, confirm_always
+from .library_helpers import FakeRootStore, choose, confirm_always, select_rows
+from .test_auto_tag_action import FakeTagger
 
 
 def make_window(qtbot: QtBot, tmp_path: Path) -> MainWindow:
@@ -47,12 +52,23 @@ def test_closing_saves_geometry_and_reopening_restores_it(qtbot: QtBot, tmp_path
     assert make_window(qtbot, tmp_path).size().width() == 640
 
 
+def make_library(tmp_path: Path, tagger: Tagger | None = None) -> LibraryPanel:
+    services = LibraryServices(
+        get_download_folder=lambda: tmp_path,
+        is_downloading=lambda: False,
+        thread_pool=QThreadPool(),
+        tag_store=FakeTagStore(),
+        root_store=FakeRootStore(),
+        tagger=tagger,
+        confirm_move=confirm_always,
+    )
+    return LibraryPanel(services)
+
+
 def make_downloading_window(qtbot: QtBot, tmp_path: Path) -> MainWindow:
     store = make_store(tmp_path)
     panel = make_panel(store, lambda settings: BlockingDownloader())
-    library = LibraryPanel(
-        lambda: tmp_path, lambda: False, QThreadPool(), FakeTagStore(), confirm_always
-    )
+    library = make_library(tmp_path)
     window = MainWindow(store, panel, library)
     qtbot.addWidget(window)
     window.show()
@@ -94,11 +110,9 @@ def test_closing_while_moving_waits_for_move(
         release.wait(5)
         return RelocationOutcome(source, target)
 
-    monkeypatch.setattr(move_job, "relocate_file", relocate_slowly)
+    monkeypatch.setattr(move_work, "relocate_file", relocate_slowly)
     store = make_store(tmp_path)
-    library = LibraryPanel(
-        lambda: tmp_path, lambda: False, QThreadPool(), FakeTagStore(), confirm_always
-    )
+    library = make_library(tmp_path)
     window = MainWindow(store, make_panel(store, lambda settings: BlockingDownloader()), library)
     qtbot.addWidget(window)
     window.show()
@@ -127,7 +141,7 @@ def test_closing_while_downloading_and_moving_waits_for_both(
         release.wait(5)
         return RelocationOutcome(source, target)
 
-    monkeypatch.setattr(move_job, "relocate_file", relocate_slowly)
+    monkeypatch.setattr(move_work, "relocate_file", relocate_slowly)
     window = make_downloading_window(qtbot, tmp_path)
     library = window.library_panel
     song = tmp_path / "Song.mp3"
@@ -170,4 +184,55 @@ def test_closing_while_tagging_waits_for_tag_writes(
         assert window.isVisible()
     finally:
         release.set()
+    qtbot.waitUntil(lambda: not window.isVisible(), timeout=2000)
+
+
+def find_nothing(name: str) -> str | None:
+    return None
+
+
+def find_soundtag(name: str) -> str | None:
+    return "/usr/bin/soundtag"
+
+
+def test_soundtag_tagger_needs_soundtag_on_path(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(main_window.shutil, "which", find_nothing)
+    assert make_soundtag_tagger() is None
+    monkeypatch.setattr(main_window.shutil, "which", find_soundtag)
+    assert isinstance(make_soundtag_tagger(), SoundTagCliTagger)
+
+
+def test_closing_while_auto_tagging_cancels_then_closes(qtbot: QtBot, tmp_path: Path):
+    tagger = FakeTagger()
+    tagger.wait_for_cancel = True
+    library = make_library(tmp_path, tagger)
+    store = make_store(tmp_path)
+    window = MainWindow(store, make_panel(store, lambda settings: BlockingDownloader()), library)
+    qtbot.addWidget(window)
+    window.show()
+    library.add_downloaded_file(tmp_path / "Song.mp3")
+    select_rows(library, 0)
+    library.auto_tag_action.auto_tag_button.click()
+    assert tagger.started.wait(2)
+    window.close()
+    qtbot.waitUntil(lambda: not window.isVisible(), timeout=2000)
+
+
+def test_second_close_stops_auto_tag_at_once(qtbot: QtBot, tmp_path: Path):
+    tagger = FakeTagger()
+    tagger.wait_for_cancel = True
+    tagger.cancel_requests_needed = 2
+    library = make_library(tmp_path, tagger)
+    store = make_store(tmp_path)
+    window = MainWindow(store, make_panel(store, lambda settings: BlockingDownloader()), library)
+    qtbot.addWidget(window)
+    window.show()
+    library.add_downloaded_file(tmp_path / "Song.mp3")
+    select_rows(library, 0)
+    library.auto_tag_action.auto_tag_button.click()
+    assert tagger.started.wait(2)
+    window.close()
+    qtbot.wait(50)
+    assert window.isVisible()
+    window.close()
     qtbot.waitUntil(lambda: not window.isVisible(), timeout=2000)

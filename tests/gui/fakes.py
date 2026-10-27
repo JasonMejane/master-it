@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, QThreadPool
 
-from masterit.download.cancellation import CancelToken
+from masterit.cancellation import CancelToken
 from masterit.download.events import EventHandler, ItemCompleted, ItemFailed, ItemRef
 from masterit.download.settings import DownloadSettings
 from masterit.gui.download_job import Downloader

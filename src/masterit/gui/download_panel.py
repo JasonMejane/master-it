@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from masterit.download.cancellation import CancelToken
+from masterit.cancellation import CancelToken
 from masterit.download.events import DownloadEvent, ItemCompleted
 from masterit.download.settings import AUDIO_QUALITIES, AudioCodec, DownloadSettings
 from masterit.download.url_input import parse_urls

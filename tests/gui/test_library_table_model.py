@@ -28,7 +28,7 @@ def get_row_texts(model: LibraryTableModel, row: int) -> list[object]:
 
 
 def get_tag_texts(model: LibraryTableModel, row: int) -> list[object]:
-    return [model.data(model.index(row, column)) for column in range(3, model.columnCount())]
+    return [model.data(model.index(row, column)) for column in range(3, 10)]
 
 
 def test_headers():
@@ -46,6 +46,7 @@ def test_headers():
         "Year",
         "Genre",
         "Track",
+        "Auto-tag",
     ]
     assert model.headerData(0, Qt.Orientation.Vertical) is None
 
@@ -211,3 +212,30 @@ def test_tag_columns_are_not_editable():
 def test_tags_of_a_file_are_shared_for_selection():
     model = make_model(store=FakeTagStore(TAGGED_STORE_TAGS))
     assert model.get_tags(SONG) == TAGGED_STORE_TAGS[SONG]
+
+
+AUTO_TAG_COLUMN = 10
+
+
+def test_auto_tag_statuses_show_per_file_and_survive_new_files(qtbot: QtBot):
+    model = make_model()
+    assert model.data(model.index(0, AUTO_TAG_COLUMN)) == ""
+    with qtbot.waitSignal(model.dataChanged):
+        model.set_auto_tag_statuses({SONG: "pending", OTHER: "tagged"})
+    model.set_auto_tag_statuses({SONG: "failed"})
+    model.set_files([OTHER, SONG], ROOT)
+    assert model.data(model.index(0, AUTO_TAG_COLUMN)) == "tagged"
+    assert model.data(model.index(1, AUTO_TAG_COLUMN)) == "failed"
+
+
+def test_auto_tag_statuses_on_empty_model_emit_nothing(qtbot: QtBot):
+    model = LibraryTableModel(TagCache(FakeTagStore()))
+    with qtbot.assertNotEmitted(model.dataChanged):
+        model.set_auto_tag_statuses({SONG: "pending"})
+
+
+def test_auto_tag_column_is_not_editable_or_colored():
+    model = make_model()
+    index = model.index(0, AUTO_TAG_COLUMN)
+    assert not model.flags(index) & Qt.ItemFlag.ItemIsEditable
+    assert model.data(index, Qt.ItemDataRole.ForegroundRole) is None

@@ -2,6 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from masterit.library.relocation_problems import RelocationProblem
 from masterit.library.rename_rules import RenameRule
 
 
@@ -9,6 +10,7 @@ from masterit.library.rename_rules import RenameRule
 class Destination:
     folder: Path
     file_name: str
+    problem: RelocationProblem | None = None
 
     @property
     def path(self) -> Path:

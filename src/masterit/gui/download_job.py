@@ -2,7 +2,7 @@ from typing import Protocol, override
 
 from PySide6.QtCore import QObject, QRunnable, Signal
 
-from masterit.download.cancellation import CancelToken
+from masterit.cancellation import CancelToken
 from masterit.download.events import EventHandler
 
 

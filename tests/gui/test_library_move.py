@@ -5,9 +5,9 @@ import pytest
 from PySide6.QtWidgets import QFileDialog, QWidget
 from pytestqt.qtbot import QtBot
 
-from masterit.gui import move_job
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.move_action import make_download_protection
+from masterit.library import move_work
 from masterit.library.relocation import RelocationOutcome, RelocationPlan
 
 from .library_helpers import (
@@ -129,7 +129,7 @@ def test_actions_are_locked_and_progress_shown_while_moving(
         release.wait(5)
         return RelocationOutcome(source, target)
 
-    monkeypatch.setattr(move_job, "relocate_file", relocate_slowly)
+    monkeypatch.setattr(move_work, "relocate_file", relocate_slowly)
     panel = make_panel(qtbot)
     add_session_files(panel, tmp_path, "A.mp3")
     select_rows(panel, 0)
@@ -152,7 +152,7 @@ def test_unexpected_error_is_shown(qtbot: QtBot, tmp_path: Path, monkeypatch: py
     def crash(source: Path, target: Path) -> RelocationOutcome:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(move_job, "relocate_file", crash)
+    monkeypatch.setattr(move_work, "relocate_file", crash)
     panel = make_panel(qtbot)
     add_session_files(panel, tmp_path, "A.mp3")
     select_rows(panel, 0)
@@ -222,7 +222,7 @@ def test_renames_are_refused_while_moving(
         release.wait(5)
         return RelocationOutcome(source, target)
 
-    monkeypatch.setattr(move_job, "relocate_file", relocate_slowly)
+    monkeypatch.setattr(move_work, "relocate_file", relocate_slowly)
     panel = make_panel(qtbot)
     [_, other] = add_session_files(panel, tmp_path, "A.mp3", "B.mp3")
     select_rows(panel, 0)

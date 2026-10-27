@@ -9,7 +9,11 @@ from PySide6.QtWidgets import QMainWindow, QTabWidget
 from masterit.download.downloader import YtDlpDownloader
 from masterit.gui.download_panel import DownloadPanel
 from masterit.gui.library_panel import LibraryPanel
+from masterit.gui.library_services import LibraryServices
 from masterit.gui.settings_store import SettingsStore
+from masterit.tagging.soundtag_cli import SoundTagCliTagger
+from masterit.tagging.subprocess_process import start_subprocess
+from masterit.tagging.tagger import Tagger
 from masterit.tags.tag_store import MutagenTagStore
 
 
@@ -46,11 +50,14 @@ class MainWindow(QMainWindow):
     def _close_when_idle(self, event: QCloseEvent) -> None:
         event.ignore()
         if self._is_closing:
+            # A second close stops SoundTag at once instead of after its current file.
+            self.library_panel.stop_work()
             return
         self._is_closing = True
         self.download_panel.download_finished.connect(self._close_if_idle)
         self.library_panel.work_finished.connect(self._close_if_idle)
         self._stop_download()
+        self.library_panel.stop_work()
 
     def _stop_download(self) -> None:
         if self.download_panel.is_running:
@@ -71,6 +78,11 @@ def get_default_output_dir() -> Path:
     return Path(QStandardPaths.writableLocation(location)) / "YT_DL"
 
 
+def make_soundtag_tagger() -> Tagger | None:
+    executable = shutil.which("soundtag")
+    return None if executable is None else SoundTagCliTagger(start_subprocess, Path(executable))
+
+
 def make_main_window(settings: QSettings) -> MainWindow:
     store = SettingsStore(settings)
     default_output_dir = get_default_output_dir()
@@ -82,10 +94,13 @@ def make_main_window(settings: QSettings) -> MainWindow:
         default_output_dir,
         ffmpeg_available=shutil.which("ffmpeg") is not None,
     )
-    library_panel = LibraryPanel(
-        lambda: store.load_download_settings(default_output_dir).output_dir,
-        lambda: download_panel.is_running,
-        thread_pool,
-        MutagenTagStore(),
+    services = LibraryServices(
+        get_download_folder=lambda: store.load_download_settings(default_output_dir).output_dir,
+        is_downloading=lambda: download_panel.is_running,
+        thread_pool=thread_pool,
+        tag_store=MutagenTagStore(),
+        root_store=store,
+        tagger=make_soundtag_tagger(),
     )
+    library_panel = LibraryPanel(services)
     return MainWindow(store, download_panel, library_panel)

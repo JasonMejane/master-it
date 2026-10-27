@@ -1,7 +1,7 @@
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -12,10 +12,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from masterit.gui.auto_tag_action import AutoTagAction
+from masterit.gui.library_services import LibraryServices
 from masterit.gui.library_source import LibrarySource
 from masterit.gui.library_table_model import LibraryTableModel
-from masterit.gui.move_action import MoveAction, MoveConfirmation
-from masterit.gui.move_dialog import confirm_move
+from masterit.gui.move_action import MoveAction
 from masterit.gui.rename_bar import RenameBar
 from masterit.gui.source_bar import SourceBar
 from masterit.gui.summaries import format_relocation_summary, format_tag_summary
@@ -28,37 +29,38 @@ from masterit.library.relocation import (
 from masterit.tags.fields import Tags
 from masterit.tags.tag_cache import TagCache
 from masterit.tags.tag_edits import TagOutcome
-from masterit.tags.tag_store import TagStore
 
 
 class LibraryPanel(QWidget):
     work_finished = Signal()
 
-    def __init__(
-        self,
-        get_download_folder: Callable[[], Path],
-        is_downloading: Callable[[], bool],
-        thread_pool: QThreadPool,
-        tag_store: TagStore,
-        confirm: MoveConfirmation = confirm_move,
-    ) -> None:
+    def __init__(self, services: LibraryServices) -> None:
         super().__init__()
         self._source = LibrarySource()
-        self._build_table(TagCache(tag_store))
+        self._build_table(TagCache(services.tag_store))
         self.status_label = QLabel()
         self.source_bar = SourceBar()
         self.rename_bar = RenameBar(self)
         self.move_action = MoveAction(
-            self, get_download_folder, is_downloading, thread_pool, confirm
+            self,
+            services.get_download_folder,
+            services.is_downloading,
+            services.thread_pool,
+            services.confirm_move,
         )
-        self.tag_form = TagForm(self, tag_store, thread_pool)
+        self.tag_form = TagForm(self, services.tag_store, services.thread_pool)
+        self.auto_tag_action = AutoTagAction(self, services)
         self._build_layout()
         self._connect_signals()
         self._refresh_selection_views()
 
     @property
     def is_busy(self) -> bool:
-        return self.move_action.is_moving or self.tag_form.is_tagging
+        jobs = (self.move_action.is_moving, self.tag_form.is_tagging)
+        return any(jobs) or self.auto_tag_action.is_running
+
+    def stop_work(self) -> None:
+        self.auto_tag_action.cancel()
 
     @property
     def opened_folder(self) -> Path | None:
@@ -104,6 +106,13 @@ class LibraryPanel(QWidget):
         self.tag_form.load_selection()
         self.show_status(format_tag_summary(outcomes))
 
+    def show_auto_tag_statuses(self, statuses: Mapping[Path, str]) -> None:
+        self.table_model.set_auto_tag_statuses(statuses)
+
+    def refresh_tags(self, paths: Iterable[Path]) -> None:
+        self.table_model.refresh_tags(paths)
+        self.tag_form.load_selection()
+
     def _refresh_selection_views(self) -> None:
         self.rename_bar.refresh_preview()
         self.tag_form.load_selection()
@@ -112,6 +121,7 @@ class LibraryPanel(QWidget):
         widgets = (self.source_bar, self.move_action, self.rename_bar, self.tag_form)
         for widget in (*widgets, self.table_view):
             widget.setEnabled(not busy)
+        self.auto_tag_action.set_busy(busy)
         self.rename_bar.refresh_preview()
 
     def _reload_files(self) -> None:
@@ -133,6 +143,7 @@ class LibraryPanel(QWidget):
         top_row.addWidget(self.move_action)
         layout = QVBoxLayout(self)
         layout.addLayout(top_row)
+        layout.addWidget(self.auto_tag_action)
         content_row = QHBoxLayout()
         content_row.addWidget(self.table_view, stretch=1)
         content_row.addWidget(self.tag_form)
@@ -144,7 +155,7 @@ class LibraryPanel(QWidget):
         self.source_bar.folder_chosen.connect(self.open_folder)
         self.source_bar.session_requested.connect(self.show_session)
         self.table_view.selectionModel().selectionChanged.connect(self._refresh_selection_views)
-        for action in (self.move_action, self.tag_form):
+        for action in (self.move_action, self.tag_form, self.auto_tag_action):
             action.started.connect(lambda: self._set_busy(True))
             action.finished.connect(lambda: self._set_busy(False))
             action.finished.connect(self.work_finished)

@@ -46,7 +46,18 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
   table's tag columns, are discarded on selection change, and are refused for malformed
   Year (`2024[-05[-17]]`) or Track (`3[/12]`, 1–9999); problems show inside the form.
   Writes run in the background like moves; closing waits for them.
-- **Auto-tag**: via SoundTag (Deezer, Discogs, MusicBrainz…), tags + cover, overwrite.
+- **Auto-tag**: "Auto-tag selected" runs `soundtag --json --overwrite <files>` in the
+  background; an "Auto-tag" column shows each file's status for the session (pending,
+  tagged, skipped, failed, stopped) and tag columns refresh. Cancel stops SoundTag after
+  its current file; closing the app cancels, then waits. Disabled with a hint when
+  `soundtag` is not on PATH.
+- **Repack**: "Repack selected" moves files into the library layout
+  `<Root>/<Artist>/<Artist> - <Title>.<ext>` built from their tags (characters Windows
+  refuses become "-", leading dots/spaces and trailing dots/spaces dropped, reserved
+  device names such as "Con" get a "_", names cut to 255 bytes; files without artist or
+  title are skipped), then auto-tags the moved files and those already in place. One
+  confirmation lists moves, files in place and skips. The library root is picked in the
+  Library tab (asked on first repack) and saved in settings.
 
 ## Decisions
 
@@ -83,7 +94,7 @@ src/masterit/
 
 ## Roadmap
 
-Status (2026-10-27): phases 0–5 done; next is phase 6.
+Status (2026-10-27): phases 0–6 done; next is phase 7 (optional).
 
 0. Scaffold — done (`ba9e9c7`).
 1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
@@ -92,10 +103,10 @@ Status (2026-10-27): phases 0–5 done; next is phase 6.
 4. Move (shared relocation engine, confirmation, background job, safe cleanup) — done.
 5. Manual tag edit (bulk/single); `gui/library_panel.py` split into source, rename, move
    and tag sub-widgets sharing a `LibraryContext` — done.
-6. Repack pipeline + SoundTag adapter (+ `--json` in SoundTag). Run SoundTag with
-   `--overwrite`: yt-dlp already writes title, artist, year, genre and cover, so SoundTag
-   would otherwise skip downloads as fully tagged. The library layout plugs into the
-   relocation engine as another destination maker.
+6. Repack pipeline + SoundTag adapter — done. SoundTag gained opus/m4a, several
+   sources per run and `--json` events. SoundTag runs with `--overwrite`: yt-dlp already
+   writes title, artist, year, genre and cover, so it would otherwise skip downloads.
+   The library layout is another destination maker of the relocation engine.
 7. Optional: native Python tagger.
 
 Known limits:
@@ -103,4 +114,18 @@ Known limits:
   between the check and the rename (no portable no-replace rename on FAT/exFAT).
 - Rename chains (b → ab while ab moves too) are refused rather than ordered.
 - Selecting files reads their tags on the GUI thread (cached); a huge selection may stall.
-- Editing a multi-value tag writes the typed text as a single value.
+- Editing a multi-value tag writes the typed text as a single value; the layout uses it
+  joined ("A; B") as the artist folder.
+- SoundTag reports no reason for a failed file in its JSON events (it stays in its log).
+- A file inside an album folder (`<Artist> - <Album>`) brings its whole album into the
+  SoundTag run; those extra files get statuses too.
+- Moves of a repack cannot be cancelled, only the tagging after them. Cancel stops
+  SoundTag after its current file; a second Cancel (or second close) stops it at once.
+- Two stops within 200 ms count as one in SoundTag, so a fast double click only stops it
+  after the current file.
+- Windows: SoundTag only handles SIGINT, so the first Cancel already stops it at once
+  (CTRL_BREAK).
+- Windows: `soundtag` is an npm `.cmd` wrapper run through cmd.exe, where file names with
+  `&`, `%` or `^` can break the command line (not handled yet; Linux is the target).
+- Layout on case-insensitive drives: an artist folder existing with another casing is
+  reused, but the file is not seen as in place on later repacks.

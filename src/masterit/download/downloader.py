@@ -6,7 +6,7 @@ from typing import Any, Protocol, cast
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadCancelled, YoutubeDLError
 
-from masterit.download.cancellation import CancelToken
+from masterit.cancellation import CancelToken
 from masterit.download.events import EventHandler
 from masterit.download.hooks import UrlEventReporter
 from masterit.download.options import make_ydl_options

@@ -31,6 +31,13 @@ class SettingsStore:
         self._settings.setValue("download/codec", str(settings.codec))
         self._settings.setValue("download/quality", settings.quality)
 
+    def load_library_root(self) -> Path | None:
+        root = self._read("library/root", "")
+        return Path(root) if root else None
+
+    def save_library_root(self, root: Path) -> None:
+        self._settings.setValue("library/root", str(root))
+
     def load_window_geometry(self) -> QByteArray | None:
         geometry = self._settings.value("window/geometry")
         return geometry if isinstance(geometry, QByteArray) else None

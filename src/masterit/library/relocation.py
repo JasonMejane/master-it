@@ -5,22 +5,15 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 
 from masterit.library.destinations import Destination, DestinationMaker
+from masterit.library.relocation_problems import RelocationProblem
 
 # Also rejects names Windows cannot read, as the library may live on an NTFS drive.
 INVALID_NAME_PATTERN = re.compile(r'[/\\:*?"<>|\x00-\x1f]|^\.')
 
 type FolderCheck = Callable[[Path], bool]
-
-
-class RelocationProblem(StrEnum):
-    EMPTY_NAME = "Name is empty"
-    INVALID_NAME = 'Name starts with "." or contains / \\ : * ? " < > | or a control character'
-    DUPLICATE_TARGET = "Several files would get this name"
-    TARGET_EXISTS = "A file with this name already exists"
 
 
 @dataclass(frozen=True)
@@ -58,11 +51,15 @@ def make_relocation_plan(
     paths: Iterable[Path], make_destination: DestinationMaker
 ) -> RelocationPlan:
     moves = [(path, make_destination(path)) for path in paths]
-    changes = [(path, destination) for path, destination in moves if destination.path != path]
+    changes = [(path, destination) for path, destination in moves if is_change(path, destination)]
     target_counts = Counter(destination.path for _, destination in changes)
     return RelocationPlan(
         tuple(make_relocation(path, destination, target_counts) for path, destination in changes)
     )
+
+
+def is_change(source: Path, destination: Destination) -> bool:
+    return destination.path != source or destination.problem is not None
 
 
 def make_relocation(
@@ -71,6 +68,7 @@ def make_relocation(
     name = destination.file_name
     target = destination.path
     failures = (
+        (destination.problem, destination.problem is not None),
         (RelocationProblem.EMPTY_NAME, not name.removesuffix(source.suffix).strip()),
         (RelocationProblem.INVALID_NAME, INVALID_NAME_PATTERN.search(name) is not None),
         (RelocationProblem.DUPLICATE_TARGET, target_counts[target] > 1),

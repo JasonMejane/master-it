@@ -1,4 +1,4 @@
-from masterit.download.cancellation import CancelToken
+from masterit.cancellation import CancelToken
 from masterit.download.events import ItemFailed
 from masterit.gui.download_job import Downloader, DownloadJob
 

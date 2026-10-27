@@ -7,8 +7,11 @@ from PySide6.QtWidgets import QFileDialog, QWidget
 from pytestqt.qtbot import QtBot
 
 from masterit.gui.library_panel import LibraryPanel
+from masterit.gui.library_services import LibraryServices
 from masterit.gui.move_action import MoveConfirmation
 from masterit.library.relocation import RelocationPlan
+from masterit.repack.pipeline import RepackPlan
+from masterit.tagging.tagger import Tagger
 from masterit.tags.tag_store import TagStore
 
 from ..tags.fakes import FakeTagStore
@@ -16,6 +19,21 @@ from ..tags.fakes import FakeTagStore
 
 def confirm_always(parent: QWidget, plan: RelocationPlan, folder: Path) -> bool:
     return True
+
+
+def confirm_repack_always(parent: QWidget, plan: RepackPlan, root: Path) -> bool:
+    return True
+
+
+class FakeRootStore:
+    def __init__(self, root: Path | None = None) -> None:
+        self.root = root
+
+    def load_library_root(self) -> Path | None:
+        return self.root
+
+    def save_library_root(self, root: Path) -> None:
+        self.root = root
 
 
 def make_files(root: Path, *names: str) -> list[Path]:
@@ -32,14 +50,20 @@ def make_panel(
     confirm_move: MoveConfirmation = confirm_always,
     is_downloading: Callable[[], bool] = lambda: False,
     tag_store: TagStore | None = None,
+    tagger: Tagger | None = None,
+    root_store: FakeRootStore | None = None,
 ) -> LibraryPanel:
-    panel = LibraryPanel(
-        lambda: download_folder,
-        is_downloading,
-        QThreadPool(),
-        tag_store or FakeTagStore(),
-        confirm_move,
+    services = LibraryServices(
+        get_download_folder=lambda: download_folder,
+        is_downloading=is_downloading,
+        thread_pool=QThreadPool(),
+        tag_store=tag_store or FakeTagStore(),
+        root_store=root_store or FakeRootStore(),
+        tagger=tagger,
+        confirm_move=confirm_move,
+        confirm_repack=confirm_repack_always,
     )
+    panel = LibraryPanel(services)
     qtbot.addWidget(panel)
     return panel
 

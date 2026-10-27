@@ -3,7 +3,7 @@ from typing import Any
 
 from yt_dlp.utils import DownloadCancelled
 
-from masterit.download.cancellation import CancelToken
+from masterit.cancellation import CancelToken
 from masterit.download.events import EventHandler, ItemProgress, ItemRef
 from masterit.download.item_tracker import ItemOutcomeTracker
 from masterit.download.settings import AudioCodec
