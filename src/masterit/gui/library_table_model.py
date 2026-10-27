@@ -10,7 +10,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor
 
-from masterit.library.rename_plan import RenameEntry, RenamePlan
+from masterit.library.relocation import Relocation, RelocationPlan
 
 type Index = QModelIndex | QPersistentModelIndex
 
@@ -21,10 +21,17 @@ ROOT = QModelIndex()
 PROBLEM_COLOR = QColor(Qt.GlobalColor.red)
 
 
-def get_preview_text(entry: RenameEntry | None) -> str:
+def get_preview_text(entry: Relocation | None) -> str:
     if entry is None:
         return ""
     return entry.target.name if entry.problem is None else f"⚠ {entry.problem}"
+
+
+def describe_folder(path: Path, resolved_root: Path | None) -> str:
+    if resolved_root is None:
+        return str(path.parent)
+    relative = path.parent.resolve().relative_to(resolved_root)
+    return "" if relative == Path() else str(relative)
 
 
 class LibraryTableModel(QAbstractTableModel):
@@ -34,12 +41,14 @@ class LibraryTableModel(QAbstractTableModel):
         super().__init__()
         self._files: list[Path] = []
         self._root: Path | None = None
-        self._preview: dict[Path, RenameEntry] = {}
+        self._folder_texts: dict[Path, str] = {}
+        self._preview: dict[Path, Relocation] = {}
 
     def set_files(self, files: list[Path], root: Path | None) -> None:
         self.beginResetModel()
         self._files = list(files)
-        self._root = root
+        self._root = None if root is None else root.resolve()
+        self._folder_texts = {path: describe_folder(path, self._root) for path in files}
         self._preview = {}
         self.endResetModel()
 
@@ -47,6 +56,7 @@ class LibraryTableModel(QAbstractTableModel):
         row = len(self._files)
         self.beginInsertRows(ROOT, row, row)
         self._files.append(path)
+        self._folder_texts[path] = describe_folder(path, self._root)
         self.endInsertRows()
 
     def get_files(self) -> list[Path]:
@@ -55,7 +65,7 @@ class LibraryTableModel(QAbstractTableModel):
     def get_path(self, row: int) -> Path:
         return self._files[row]
 
-    def set_preview(self, plan: RenamePlan) -> None:
+    def set_preview(self, plan: RelocationPlan) -> None:
         self._preview = {entry.source: entry for entry in plan.entries}
         if not self._files:
             return
@@ -109,7 +119,7 @@ class LibraryTableModel(QAbstractTableModel):
         return None if handler is None else handler(path, column)
 
     def _get_display_text(self, path: Path, column: int) -> str:
-        texts = (path.name, get_preview_text(self._preview.get(path)), self._get_folder(path))
+        texts = (path.name, get_preview_text(self._preview.get(path)), self._folder_texts[path])
         return texts[column]
 
     def _get_edit_text(self, path: Path, column: int) -> str:
@@ -119,9 +129,3 @@ class LibraryTableModel(QAbstractTableModel):
         entry = self._preview.get(path)
         has_problem = column == PREVIEW_COLUMN and entry is not None and not entry.is_valid
         return PROBLEM_COLOR if has_problem else None
-
-    def _get_folder(self, path: Path) -> str:
-        if self._root is None:
-            return str(path.parent)
-        relative = path.parent.relative_to(self._root)
-        return "" if relative == Path() else str(relative)

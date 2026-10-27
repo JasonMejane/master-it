@@ -31,7 +31,12 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
   (`/ \ : * ? " < > |`, control characters) or starting with "." are refused. A rename onto
   an existing file is refused, including chains (b → ab while ab moves too). Inline edit
   (double-click/F2) renames one file; a typed extension is ignored.
-- **Move**: select files, choose destination, preview, apply; conflicts reported.
+- **Move**: select files → "Move selected to…" → folder picker → confirmation dialog listing
+  moves and skipped conflicts → background move with progress. Destinations are flattened.
+  Cross-drive moves copy (exclusive create, never overwriting) then delete the source; a
+  failed copy is removed. Emptied source folders are removed inside the opened folder (or the
+  download folder in session view), never the download folder itself nor its content while a
+  download runs. Closing waits for a running move.
 - **Manual tags**: ID3v2.4 (mutagen) edit, bulk and single.
 - **Auto-tag**: via SoundTag (Deezer, Discogs, MusicBrainz…), tags + cover, overwrite.
 
@@ -50,7 +55,9 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
   folder is the system Music folder + `YT_DL`. Download is disabled when ffmpeg is missing.
 - **Closing during a download**: cancels and closes once the current step ends; a second
   close quits at once.
-- **File operations as plans**: preview → apply (undo possible later).
+- **File operations as plans**: one relocation engine (`library/relocation.py`) for rename,
+  move and the future repack layout; each operation only supplies a destination maker.
+  Preview → apply (undo possible later).
 - **Tooling**: uv, pytest + pytest-qt + pytest-cov (≥ 90%), ruff (complexity ≤ 3),
   pyright (strict).
 
@@ -59,7 +66,7 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
 ```
 src/masterit/
   download/  YtDlpDownloader, options builder, progress events
-  library/   TrackFile, RenamePlan, MovePlan, library layout
+  library/   audio listing, rename rules, destinations, relocation plan (rename/move/layout)
   tags/      TagStore (mutagen), bulk/single tag edits
   tagging/   Tagger protocol, SoundTagCliTagger
   repack/    RepackPipeline: clean → move → tag
@@ -68,13 +75,22 @@ src/masterit/
 
 ## Roadmap
 
-0. Scaffold — done.
-1. Download core (yt-dlp faked in tests) — done.
-2. GUI shell + Download tab (live progress, cancel) — done.
-3. Results table + rename (bulk/single, preview) — done.
-4. Move plans + apply.
-5. Manual tag edit (bulk/single).
+Status (2026-10-27): phases 0–4 done; next is phase 5.
+
+0. Scaffold — done (`ba9e9c7`).
+1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
+2. GUI shell + Download tab (live progress, cancel) — done (`93c3c59`).
+3. Library tab + rename (bulk/single, live preview) — done (`27f1d5c`).
+4. Move (shared relocation engine, confirmation, background job, safe cleanup) — done.
+5. Manual tag edit (bulk/single). Before starting: split `gui/library_panel.py` (browsing,
+   rename, move) into smaller focused parts, since tag editing would grow it further.
 6. Repack pipeline + SoundTag adapter (+ `--json` in SoundTag). Run SoundTag with
    `--overwrite`: yt-dlp already writes title, artist, year, genre and cover, so SoundTag
-   would otherwise skip downloads as fully tagged.
+   would otherwise skip downloads as fully tagged. The library layout plugs into the
+   relocation engine as another destination maker.
 7. Optional: native Python tagger.
+
+Known limits:
+- A same-drive rename/move can overwrite a file created at the target in the instant
+  between the check and the rename (no portable no-replace rename on FAT/exFAT).
+- Rename chains (b → ab while ab moves too) are refused rather than ordered.

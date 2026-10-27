@@ -1,13 +1,19 @@
+import threading
 from pathlib import Path
 
-from PySide6.QtCore import QSettings
+import pytest
+from PySide6.QtCore import QSettings, QThreadPool
+from PySide6.QtWidgets import QFileDialog
 from pytestqt.qtbot import QtBot
 
+from masterit.gui import move_job
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.main_window import MainWindow, make_main_window
 from masterit.gui.settings_store import SettingsStore
+from masterit.library.relocation import RelocationOutcome
 
 from .fakes import BlockingDownloader, make_panel, make_store
+from .library_helpers import choose, confirm_always
 
 
 def make_window(qtbot: QtBot, tmp_path: Path) -> MainWindow:
@@ -39,7 +45,8 @@ def test_closing_saves_geometry_and_reopening_restores_it(qtbot: QtBot, tmp_path
 def make_downloading_window(qtbot: QtBot, tmp_path: Path) -> MainWindow:
     store = make_store(tmp_path)
     panel = make_panel(store, lambda settings: BlockingDownloader())
-    window = MainWindow(store, panel, LibraryPanel())
+    library = LibraryPanel(lambda: tmp_path, lambda: False, QThreadPool(), confirm_always)
+    window = MainWindow(store, panel, library)
     qtbot.addWidget(window)
     window.show()
     window.download_panel.url_input.setPlainText("https://a")
@@ -69,3 +76,61 @@ def test_downloaded_files_reach_library(qtbot: QtBot, tmp_path: Path):
     window = make_window(qtbot, tmp_path)
     window.download_panel.file_downloaded.emit(Path("/music/Song.mp3"))
     assert window.library_panel.table_model.get_path(0) == Path("/music/Song.mp3")
+
+
+def test_closing_while_moving_waits_for_move(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    release = threading.Event()
+
+    def relocate_slowly(source: Path, target: Path) -> RelocationOutcome:
+        release.wait(5)
+        return RelocationOutcome(source, target)
+
+    monkeypatch.setattr(move_job, "relocate_file", relocate_slowly)
+    store = make_store(tmp_path)
+    library = LibraryPanel(lambda: tmp_path, lambda: False, QThreadPool(), confirm_always)
+    window = MainWindow(store, make_panel(store, lambda settings: BlockingDownloader()), library)
+    qtbot.addWidget(window)
+    window.show()
+    song = tmp_path / "Song.mp3"
+    song.touch()
+    library.add_downloaded_file(song)
+    library.table_view.selectRow(0)
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(tmp_path / "d")))
+    library.move_button.click()
+    try:
+        window.close()
+        window.close()
+        qtbot.wait(100)
+        assert window.isVisible()
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: not window.isVisible(), timeout=2000)
+
+
+def test_closing_while_downloading_and_moving_waits_for_both(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    release = threading.Event()
+
+    def relocate_slowly(source: Path, target: Path) -> RelocationOutcome:
+        release.wait(5)
+        return RelocationOutcome(source, target)
+
+    monkeypatch.setattr(move_job, "relocate_file", relocate_slowly)
+    window = make_downloading_window(qtbot, tmp_path)
+    library = window.library_panel
+    song = tmp_path / "Song.mp3"
+    song.touch()
+    library.add_downloaded_file(song)
+    library.table_view.selectRow(0)
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(tmp_path / "d")))
+    library.move_button.click()
+    try:
+        with qtbot.waitSignal(window.download_panel.download_finished, timeout=1000):
+            window.close()
+        assert window.isVisible()
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: not window.isVisible(), timeout=2000)

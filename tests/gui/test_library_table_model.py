@@ -1,11 +1,12 @@
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import QModelIndex, Qt
 from PySide6.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
 from masterit.gui.library_table_model import LibraryTableModel
-from masterit.library.rename_plan import RenameEntry, RenamePlan, RenameProblem
+from masterit.library.relocation import Relocation, RelocationPlan, RelocationProblem
 
 ROOT = Path("/music")
 SONG = ROOT / "list" / "Song.mp3"
@@ -52,10 +53,10 @@ def test_append_file_inserts_row(qtbot: QtBot):
 
 def test_preview_shows_new_names_and_problems(qtbot: QtBot):
     model = make_model()
-    plan = RenamePlan(
+    plan = RelocationPlan(
         (
-            RenameEntry(SONG, ROOT / "list" / "X Song.mp3"),
-            RenameEntry(OTHER, ROOT / "X.mp3", RenameProblem.TARGET_EXISTS),
+            Relocation(SONG, ROOT / "list" / "X Song.mp3"),
+            Relocation(OTHER, ROOT / "X.mp3", RelocationProblem.TARGET_EXISTS),
         )
     )
     with qtbot.waitSignal(model.dataChanged):
@@ -106,8 +107,30 @@ def test_invalid_index_and_child_counts():
 def test_preview_on_empty_model_emits_nothing(qtbot: QtBot):
     model = LibraryTableModel()
     with qtbot.assertNotEmitted(model.dataChanged):
-        model.set_preview(RenamePlan(()))
+        model.set_preview(RelocationPlan(()))
 
 
 def test_get_files_returns_listed_files():
     assert make_model().get_files() == [SONG, OTHER]
+
+
+def test_folder_is_relative_through_symlinked_root(tmp_path: Path):
+    (tmp_path / "real/list").mkdir(parents=True)
+    (tmp_path / "link").symlink_to(tmp_path / "real")
+    model = LibraryTableModel()
+    model.set_files([tmp_path / "real/list/Song.mp3"], tmp_path / "link")
+    assert model.data(model.index(0, 2)) == "list"
+
+
+def test_folder_text_is_computed_once_not_on_every_paint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    model = LibraryTableModel()
+    model.set_files([tmp_path / "list/Song.mp3"], tmp_path)
+    model.append_file(tmp_path / "Other.mp3")
+
+    def fail_resolve(self: Path, strict: bool = False) -> Path:
+        raise AssertionError("resolve called while painting")
+
+    monkeypatch.setattr(Path, "resolve", fail_resolve)
+    assert [model.data(model.index(row, 2)) for row in range(2)] == ["list", ""]

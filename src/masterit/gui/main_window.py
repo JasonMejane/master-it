@@ -31,17 +31,33 @@ class MainWindow(QMainWindow):
 
     @override
     def closeEvent(self, event: QCloseEvent) -> None:
-        if self.download_panel.is_running and not self._is_closing:
-            self._close_after_download(event)
+        if self._must_defer_close():
+            self._close_when_idle(event)
             return
         self._store.save_window_geometry(self.saveGeometry())
         super().closeEvent(event)
 
-    def _close_after_download(self, event: QCloseEvent) -> None:
-        self._is_closing = True
+    def _must_defer_close(self) -> bool:
+        # A second close may abandon a download, never a move: it could leave a partial copy.
+        is_download_pending = self.download_panel.is_running and not self._is_closing
+        return self.library_panel.is_moving or is_download_pending
+
+    def _close_when_idle(self, event: QCloseEvent) -> None:
         event.ignore()
-        self.download_panel.download_finished.connect(self.close)
-        self.download_panel.stop()
+        if self._is_closing:
+            return
+        self._is_closing = True
+        self.download_panel.download_finished.connect(self._close_if_idle)
+        self.library_panel.move_finished.connect(self._close_if_idle)
+        self._stop_download()
+
+    def _stop_download(self) -> None:
+        if self.download_panel.is_running:
+            self.download_panel.stop()
+
+    def _close_if_idle(self) -> None:
+        if not (self.download_panel.is_running or self.library_panel.is_moving):
+            self.close()
 
     def _restore_geometry(self) -> None:
         geometry = self._store.load_window_geometry()
@@ -56,11 +72,18 @@ def get_default_output_dir() -> Path:
 
 def make_main_window(settings: QSettings) -> MainWindow:
     store = SettingsStore(settings)
-    panel = DownloadPanel(
+    default_output_dir = get_default_output_dir()
+    thread_pool = QThreadPool.globalInstance()
+    download_panel = DownloadPanel(
         store,
         YtDlpDownloader,
-        QThreadPool.globalInstance(),
-        get_default_output_dir(),
+        thread_pool,
+        default_output_dir,
         ffmpeg_available=shutil.which("ffmpeg") is not None,
     )
-    return MainWindow(store, panel, LibraryPanel())
+    library_panel = LibraryPanel(
+        lambda: store.load_download_settings(default_output_dir).output_dir,
+        lambda: download_panel.is_running,
+        thread_pool,
+    )
+    return MainWindow(store, download_panel, library_panel)
