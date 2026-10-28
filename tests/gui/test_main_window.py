@@ -2,7 +2,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QSettings, QThreadPool
+from PySide6.QtCore import QSettings, QStandardPaths, QThreadPool
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog
 from pytestqt.qtbot import QtBot
@@ -10,7 +10,12 @@ from pytestqt.qtbot import QtBot
 from masterit.gui import tag_job
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.library_services import LibraryServices
-from masterit.gui.main_window import MainWindow, make_app_tagger, make_main_window
+from masterit.gui.main_window import (
+    MainWindow,
+    get_default_music_folder,
+    make_app_tagger,
+    make_main_window,
+)
 from masterit.gui.settings_store import SettingsStore
 from masterit.library import move_work
 from masterit.library.relocation import RelocationOutcome
@@ -31,6 +36,18 @@ def make_window(qtbot: QtBot, tmp_path: Path) -> MainWindow:
     window = make_main_window(settings)
     qtbot.addWidget(window)
     return window
+
+
+def test_default_music_folder_is_the_system_music_folder():
+    location = QStandardPaths.StandardLocation.MusicLocation
+    assert get_default_music_folder() == Path(QStandardPaths.writableLocation(location))
+
+
+def test_downloads_and_library_default_to_the_music_folder(qtbot: QtBot, tmp_path: Path):
+    window = make_window(qtbot, tmp_path)
+    music = str(get_default_music_folder())
+    assert window.download_panel.output_dir_input.text() == music
+    assert window.library_panel.auto_tag_action.root_label.text() == f"Library: {music}"
 
 
 def test_main_window_is_titled_masterit(qtbot: QtBot, tmp_path: Path):
@@ -60,6 +77,7 @@ def make_library(tmp_path: Path, tagger: Tagger | None = None) -> LibraryPanel:
         tag_store=FakeTagStore(),
         cover_store=FakeCoverStore(),
         root_store=FakeRootStore(),
+        default_library_root=tmp_path,
         make_tagger=lambda: tagger or UnusedTagger(),
         confirm_move=confirm_always,
     )

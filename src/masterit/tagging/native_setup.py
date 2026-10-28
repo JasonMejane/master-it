@@ -39,12 +39,10 @@ from masterit.tagging.web.batch_cache import BatchCache
 from masterit.tagging.web.images import ImageCache
 from masterit.tagging.web.transport import HttpTransport, UrllibTransport
 
-REPOSITORY_URL = "https://github.com/JasonMejane/master-it"
 
-
-# MusicBrainz asks every client to name itself with a way to reach its author.
-def get_default_user_agent() -> str:
-    return f"{get_app_name()} ( {REPOSITORY_URL} )"
+# MusicBrainz throttles anonymous clients; a per-install id sets this one apart.
+def get_default_user_agent(client_id: str) -> str:
+    return f"{get_app_name()} ( {client_id} )"
 
 
 def get_app_name() -> str:

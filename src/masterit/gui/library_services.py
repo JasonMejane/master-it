@@ -21,7 +21,7 @@ type RepackConfirmation = Callable[[QWidget, RepackPlan, Path], bool]
 
 
 class LibraryRootStore(Protocol):
-    def load_library_root(self) -> Path | None: ...
+    def load_library_root(self, default_root: Path) -> Path: ...
 
     def save_library_root(self, root: Path) -> None: ...
 
@@ -34,6 +34,7 @@ class LibraryServices:
     tag_store: TagStore
     cover_store: CoverStore
     root_store: LibraryRootStore
+    default_library_root: Path
     # Called when a run starts, on the GUI thread, so settings changed meanwhile apply.
     make_tagger: Callable[[], Tagger]
     confirm_move: MoveConfirmation = confirm_move

@@ -1,6 +1,7 @@
 from dataclasses import fields
 from pathlib import Path
 from typing import cast
+from uuid import uuid4
 
 from PySide6.QtCore import QByteArray, QSettings
 
@@ -35,15 +36,14 @@ class SettingsStore:
         self._settings.setValue("download/codec", str(settings.codec))
         self._settings.setValue("download/quality", settings.quality)
 
-    def load_library_root(self) -> Path | None:
-        root = self._read("library/root", "")
-        return Path(root) if root else None
+    def load_library_root(self, default_root: Path) -> Path:
+        return Path(self._read("library/root", str(default_root)))
 
     def save_library_root(self, root: Path) -> None:
         self._settings.setValue("library/root", str(root))
 
     def load_tagger_keys(self) -> TaggerKeys:
-        defaults = TaggerKeys(get_default_user_agent())
+        defaults = TaggerKeys(self._get_default_user_agent())
         values = {
             name: self._read(f"tagging/{name}", getattr(defaults, name)) for name in KEY_NAMES
         }
@@ -53,7 +53,7 @@ class SettingsStore:
         for name in KEY_NAMES:
             self._settings.setValue(f"tagging/{name}", getattr(keys, name))
         # Left unsaved, the default User-Agent keeps following the app version.
-        if keys.musicbrainz_user_agent.strip() == get_default_user_agent():
+        if keys.musicbrainz_user_agent.strip() == self._get_default_user_agent():
             self._settings.remove("tagging/musicbrainz_user_agent")
 
     def load_window_geometry(self) -> QByteArray | None:
@@ -64,6 +64,13 @@ class SettingsStore:
         self._settings.setValue("window/geometry", geometry)
         # Saved on close, possibly right before a forced exit that skips the deferred write.
         self._settings.sync()
+
+    def _get_default_user_agent(self) -> str:
+        client_id = self._read("tagging/client_id", "")
+        if not client_id:
+            client_id = str(uuid4())
+            self._settings.setValue("tagging/client_id", client_id)
+        return get_default_user_agent(client_id)
 
     def _read(self, key: str, default: str) -> str:
         value = self._settings.value(key, default)

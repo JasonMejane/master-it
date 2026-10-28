@@ -89,9 +89,9 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(geometry)
 
 
-def get_default_output_dir() -> Path:
+def get_default_music_folder() -> Path:
     location = QStandardPaths.StandardLocation.MusicLocation
-    return Path(QStandardPaths.writableLocation(location)) / "YT_DL"
+    return Path(QStandardPaths.writableLocation(location))
 
 
 def make_app_tagger(
@@ -102,22 +102,23 @@ def make_app_tagger(
 
 def make_main_window(settings: QSettings) -> MainWindow:
     store = SettingsStore(settings)
-    default_output_dir = get_default_output_dir()
+    music_folder = get_default_music_folder()
     thread_pool = QThreadPool.globalInstance()
     download_panel = DownloadPanel(
         store,
         YtDlpDownloader,
         thread_pool,
-        default_output_dir,
+        music_folder,
         ffmpeg_available=shutil.which("ffmpeg") is not None,
     )
     services = LibraryServices(
-        get_download_folder=lambda: store.load_download_settings(default_output_dir).output_dir,
+        get_download_folder=lambda: store.load_download_settings(music_folder).output_dir,
         is_downloading=lambda: download_panel.is_running,
         thread_pool=thread_pool,
         tag_store=MutagenTagStore(),
         cover_store=MutagenCoverStore(),
         root_store=store,
+        default_library_root=music_folder,
         make_tagger=make_app_tagger(store),
     )
     library_panel = LibraryPanel(services)

@@ -22,8 +22,8 @@ STOP_MESSAGES = (
 )
 
 
-def describe_root(root: Path | None) -> str:
-    return "No library root" if root is None else f"Library: {root}"
+def describe_root(root: Path) -> str:
+    return f"Library: {root}"
 
 
 class AutoTagAction(QWidget):
@@ -45,7 +45,7 @@ class AutoTagAction(QWidget):
         self._build_widgets()
         self._build_layout()
         self._connect_signals()
-        self.root_label.setText(describe_root(services.root_store.load_library_root()))
+        self.root_label.setText(describe_root(self._load_root()))
         self.set_busy(False)
 
     @property
@@ -59,21 +59,18 @@ class AutoTagAction(QWidget):
         self.root_button.setEnabled(not busy)
         self.cancel_button.setEnabled(self.is_running and self._stop_requests < len(STOP_MESSAGES))
 
-    def choose_root(self) -> Path | None:
-        folder = QFileDialog.getExistingDirectory(self, "Library root")
+    def choose_root(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Library root", str(self._load_root()))
         if not folder:
-            return None
+            return
         root = Path(folder)
         self._services.root_store.save_library_root(root)
         self.root_label.setText(describe_root(root))
-        return root
 
     def start_repack(self) -> None:
         if not self._has_selection("Select files to repack."):
             return
-        root = self._services.root_store.load_library_root() or self.choose_root()
-        if root is not None:
-            self._confirm_and_repack(root)
+        self._confirm_and_repack(self._load_root())
 
     def start_auto_tag(self) -> None:
         if not self._has_selection("Select files to auto-tag."):
@@ -91,6 +88,9 @@ class AutoTagAction(QWidget):
         self._stop_requests += 1
         self.cancel_button.setText("Stop now")
         self.cancel_button.setEnabled(self._stop_requests < len(STOP_MESSAGES))
+
+    def _load_root(self) -> Path:
+        return self._services.root_store.load_library_root(self._services.default_library_root)
 
     def _has_selection(self, missing_selection: str) -> bool:
         if self._context.get_selected_paths():

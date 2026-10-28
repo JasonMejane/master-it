@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import UUID
 
 from PySide6.QtCore import QByteArray, QSettings
 
@@ -12,8 +13,8 @@ def make_store(tmp_path: Path) -> SettingsStore:
 
 
 def test_defaults_to_given_folder_and_mp3_192(tmp_path: Path):
-    settings = make_store(tmp_path).load_download_settings(Path("/music/YT_DL"))
-    assert settings == DownloadSettings(Path("/music/YT_DL"), AudioCodec.MP3, "192")
+    settings = make_store(tmp_path).load_download_settings(Path("/music/downloads"))
+    assert settings == DownloadSettings(Path("/music/downloads"), AudioCodec.MP3, "192")
 
 
 def test_saved_download_settings_are_loaded_back(tmp_path: Path):
@@ -57,17 +58,32 @@ def test_window_geometry_is_written_to_disk_at_once(tmp_path: Path):
     assert "geometry" in (tmp_path / "test.conf").read_text()
 
 
-def test_library_root_is_unset_by_default(tmp_path: Path):
-    assert make_store(tmp_path).load_library_root() is None
+def test_library_root_defaults_to_given_folder(tmp_path: Path):
+    assert make_store(tmp_path).load_library_root(Path("/music")) == Path("/music")
 
 
 def test_saved_library_root_is_loaded_back(tmp_path: Path):
     make_store(tmp_path).save_library_root(Path("/music/Library, Main"))
-    assert make_store(tmp_path).load_library_root() == Path("/music/Library, Main")
+    assert make_store(tmp_path).load_library_root(Path("/music")) == Path("/music/Library, Main")
 
 
-def test_tagger_keys_default_to_the_app_user_agent(tmp_path: Path):
-    assert make_store(tmp_path).load_tagger_keys() == TaggerKeys(get_default_user_agent())
+def read_client_id(tmp_path: Path) -> str:
+    raw = QSettings(str(tmp_path / "test.conf"), QSettings.Format.IniFormat)
+    return str(raw.value("tagging/client_id", ""))
+
+
+def test_tagger_keys_default_to_the_app_user_agent_with_a_saved_client_id(tmp_path: Path):
+    keys = make_store(tmp_path).load_tagger_keys()
+    client_id = read_client_id(tmp_path)
+    assert UUID(client_id).version == 4
+    assert keys == TaggerKeys(get_default_user_agent(client_id))
+    assert make_store(tmp_path).load_tagger_keys() == keys
+
+
+def test_each_settings_file_gets_its_own_client_id(tmp_path: Path):
+    make_store(tmp_path / "a").load_tagger_keys()
+    make_store(tmp_path / "b").load_tagger_keys()
+    assert read_client_id(tmp_path / "a") != read_client_id(tmp_path / "b")
 
 
 def test_saved_tagger_keys_are_loaded_back(tmp_path: Path):
@@ -78,7 +94,8 @@ def test_saved_tagger_keys_are_loaded_back(tmp_path: Path):
 
 def test_the_default_user_agent_is_not_frozen_by_saving(tmp_path: Path):
     store = make_store(tmp_path)
-    store.save_tagger_keys(TaggerKeys(f" {get_default_user_agent()} "))
+    default_agent = store.load_tagger_keys().musicbrainz_user_agent
+    store.save_tagger_keys(TaggerKeys(f" {default_agent} "))
     raw = QSettings(str(tmp_path / "test.conf"), QSettings.Format.IniFormat)
     assert not raw.contains("tagging/musicbrainz_user_agent")
     store.save_tagger_keys(TaggerKeys(""))

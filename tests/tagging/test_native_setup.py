@@ -1,4 +1,4 @@
-from importlib.metadata import PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import pytest
@@ -81,10 +81,8 @@ def test_makes_a_tagger_that_skips_a_song_no_service_knows(tmp_path: Path):
     assert requests
 
 
-def test_the_default_user_agent_names_the_app_its_version_and_repository():
-    agent = get_default_user_agent()
-    assert agent.startswith("MasterIt/")
-    assert agent.endswith("( https://github.com/JasonMejane/master-it )")
+def test_the_default_user_agent_names_the_app_its_version_and_the_client():
+    assert get_default_user_agent("id") == f"MasterIt/{version('masterit')} ( id )"
 
 
 def test_the_default_user_agent_falls_back_without_an_installed_package(
@@ -94,4 +92,4 @@ def test_the_default_user_agent_falls_back_without_an_installed_package(
         raise PackageNotFoundError("masterit")
 
     monkeypatch.setattr(native_setup, "version", fail)
-    assert get_default_user_agent() == "MasterIt ( https://github.com/JasonMejane/master-it )"
+    assert get_default_user_agent("id") == "MasterIt ( id )"

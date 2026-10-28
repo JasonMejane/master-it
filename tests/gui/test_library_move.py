@@ -163,10 +163,10 @@ def test_unexpected_error_is_shown(qtbot: QtBot, tmp_path: Path, monkeypatch: py
 def test_download_folder_itself_is_never_removed(
     qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    downloads = tmp_path / "Musique/YT_DL"
+    downloads = tmp_path / "Music/downloads"
     panel = make_panel(qtbot, download_folder=downloads)
     make_files(downloads, "Song.mp3")
-    open_folder(panel, tmp_path / "Musique", monkeypatch)
+    open_folder(panel, tmp_path / "Music", monkeypatch)
     select_rows(panel, 0)
     start_move(qtbot, panel, tmp_path / "library", monkeypatch)
     assert downloads.is_dir()

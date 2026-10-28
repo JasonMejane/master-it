@@ -19,7 +19,14 @@ from masterit.tagging.events import (
 from masterit.tags.fields import TagField
 
 from ..tags.fakes import FakeTagStore
-from .library_helpers import FakeRootStore, choose, make_files, make_panel, select_rows
+from .library_helpers import (
+    DEFAULT_LIBRARY_ROOT,
+    FakeRootStore,
+    choose,
+    make_files,
+    make_panel,
+    select_rows,
+)
 
 AUTO_TAG_COLUMN = 11
 GENRE_COLUMN = 8
@@ -94,7 +101,7 @@ def test_root_label_shows_saved_root(qtbot: QtBot, tmp_path: Path):
     panel = make_session_panel(qtbot, tmp_path, FakeTagger(), root_store=FakeRootStore(tmp_path))
     assert panel.auto_tag_action.root_label.text() == f"Library: {tmp_path}"
     unset = make_session_panel(qtbot, tmp_path, FakeTagger())
-    assert unset.auto_tag_action.root_label.text() == "No library root"
+    assert unset.auto_tag_action.root_label.text() == f"Library: {DEFAULT_LIBRARY_ROOT}"
 
 
 def test_root_button_saves_chosen_root(
@@ -162,20 +169,36 @@ def test_repack_moves_into_library_then_tags(
     )
 
 
-def test_repack_without_root_asks_for_one(
+def test_cancelled_root_picker_keeps_the_root(
     qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     root_store = FakeRootStore()
     panel = make_session_panel(qtbot, tmp_path, FakeTagger(), root_store=root_store)
-    select_rows(panel, 0)
-    monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(""))
-    panel.auto_tag_action.repack_button.click()
-    assert not panel.is_busy
+    starts: list[object] = []
+
+    def cancel_picker(*args: object) -> str:
+        starts.append(args[2])
+        return ""
+
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", cancel_picker)
+    panel.auto_tag_action.root_button.click()
+    assert starts == [str(DEFAULT_LIBRARY_ROOT)]
     assert root_store.root is None
-    monkeypatch.setattr(QFileDialog, "getExistingDirectory", choose(str(tmp_path / "lib")))
-    with qtbot.waitSignal(panel.work_finished, timeout=2000):
-        panel.auto_tag_action.repack_button.click()
-    assert root_store.root == tmp_path / "lib"
+    assert panel.auto_tag_action.root_label.text() == f"Library: {DEFAULT_LIBRARY_ROOT}"
+
+
+def test_repack_without_saved_root_uses_the_default_root(qtbot: QtBot, tmp_path: Path):
+    panel = make_session_panel(qtbot, tmp_path, FakeTagger())
+    roots: list[Path] = []
+
+    def record_root(parent: object, plan: RepackPlan, root: Path) -> bool:
+        roots.append(root)
+        return False
+
+    panel.auto_tag_action.confirm_repack = record_root
+    select_rows(panel, 0)
+    panel.auto_tag_action.repack_button.click()
+    assert roots == [DEFAULT_LIBRARY_ROOT]
 
 
 def test_declined_repack_changes_nothing(qtbot: QtBot, tmp_path: Path):

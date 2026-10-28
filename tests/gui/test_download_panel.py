@@ -53,7 +53,7 @@ def start_download(qtbot: QtBot, panel: DownloadPanel, text: str = "https://a") 
 
 def test_form_shows_default_settings(qtbot: QtBot, tmp_path: Path):
     panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
-    assert panel.output_dir_input.text() == "/music/YT_DL"
+    assert panel.output_dir_input.text() == "/music/downloads"
     assert panel.codec_input.currentData() == AudioCodec.MP3
     assert panel.quality_input.currentText() == "192"
     assert not panel.cancel_button.isEnabled()
@@ -84,7 +84,7 @@ def test_download_uses_form_settings_and_shows_results(qtbot: QtBot, tmp_path: P
     downloader = fixture.downloader
     assert isinstance(downloader, RecordingDownloader)
     assert downloader.urls == ["https://a", "https://b"]
-    assert downloader.settings == DownloadSettings(Path("/music/YT_DL"), AudioCodec.OPUS, "320")
+    assert downloader.settings == DownloadSettings(Path("/music/downloads"), AudioCodec.OPUS, "320")
     assert panel.table_model.rowCount() == 2
     assert panel.status_label.text() == "Finished: 1 completed, 0 with warnings, 1 failed."
     assert get_status(panel, 1) == "Failed"
@@ -200,7 +200,7 @@ def test_browse_cancelled_keeps_folder(
     panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", make_folder_chooser(""))
     panel.browse_button.click()
-    assert panel.output_dir_input.text() == "/music/YT_DL"
+    assert panel.output_dir_input.text() == "/music/downloads"
 
 
 def test_stop_cancels_running_download_before_closing(qtbot: QtBot, tmp_path: Path):

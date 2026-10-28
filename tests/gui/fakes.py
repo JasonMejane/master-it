@@ -23,7 +23,7 @@ def make_panel(
     make_downloader: Callable[[DownloadSettings], Downloader],
     ffmpeg: bool = True,
 ) -> DownloadPanel:
-    return DownloadPanel(store, make_downloader, QThreadPool(), Path("/music/YT_DL"), ffmpeg)
+    return DownloadPanel(store, make_downloader, QThreadPool(), Path("/music/downloads"), ffmpeg)
 
 
 class RecordingDownloader:

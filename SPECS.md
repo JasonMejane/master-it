@@ -71,7 +71,7 @@ results (clean names, move, tag) into a library, tagged from online music servic
   tagger would split the album folder there; albums named like "CD 1" or "Singles" are
   accepted but not looked up as albums, as are artists named like "CD1"), then auto-tags the moved files and those already in place. One
   confirmation lists moves, files in place and skips. The library root is picked in the
-  Library tab (asked on first repack) and saved in settings.
+  Library tab (the system Music folder until one is picked) and saved in settings.
 
 ## Decisions
 
@@ -83,7 +83,11 @@ results (clean names, move, tag) into a library, tagged from online music servic
   thread, keys from QSettings read at each run (`KeyedTagger`).
 - **Window**: tabs — Download (links, output folder, format, quality, progress table) and
   Library (Phase 3). Settings and window geometry persist via QSettings; default output
-  folder is the system Music folder + `YT_DL`. Download is disabled when ffmpeg is missing.
+  folder is the system Music folder. Download is disabled when ffmpeg is missing.
+- **Install**: `uv tool install` from the git repo, no bundled package; `uv tool upgrade`
+  brings newer yt-dlp. `masterit --install-desktop` / `--uninstall-desktop` write or remove
+  a desktop entry and icon under `$XDG_DATA_HOME` (`desktop/`, Qt-free); the entry runs
+  the tool's own Python with `-P -m masterit`; it is refused from uv's cache (`uvx`).
 - **Closing during a download**: cancels and closes once the current step ends; a second
   close quits at once.
 - **File operations as plans**: one relocation engine (`library/relocation.py`) for rename,
@@ -102,6 +106,7 @@ src/masterit/
   tagging/   Tagger protocol, NativeTagger: web/, paths/, metadata/ (chain, providers,
              album resolver), processing/, track tag I/O, stop guard, native_setup
   repack/    RepackPipeline: clean → move → tag
+  desktop/   desktop entry and icon install (--install-desktop)
   gui/       MainWindow, tabs/panels, QThreadPool workers
 ```
 
@@ -138,7 +143,8 @@ Status (2026-10-27): phases 0–7 done.
       and album tracks, overwrite policy, `NativeTagger` emitting the tagger events with a
       reason per file) — done; settings dialog, wiring, adapter removed — done. File names with undecodable bytes become U+FFFD before searching, as
       Node reads them. API keys in a "Settings…" menu dialog (no import from SoundTag's
-      `.env`); the MusicBrainz User-Agent defaults to `MasterIt/<version> ( <repo URL> )`.
+      `.env`); the MusicBrainz User-Agent defaults to `MasterIt/<version> ( <client id> )`, a
+      random UUID made once per settings file.
       WAV files fail with a reason, as in the manual tag editor.
 
 Known limits:
