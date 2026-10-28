@@ -7,6 +7,7 @@ from pytestqt.qtbot import QtBot
 
 from masterit.gui.library_table_model import LibraryTableModel
 from masterit.library.relocation import Relocation, RelocationPlan, RelocationProblem
+from masterit.tagging.run_tracker import AutoTagCell
 from masterit.tags.fields import TagField
 from masterit.tags.tag_cache import make_tag_cache
 
@@ -222,17 +223,20 @@ def test_auto_tag_statuses_show_per_file_and_survive_new_files(qtbot: QtBot):
     model = make_model()
     assert model.data(model.index(0, AUTO_TAG_COLUMN)) == ""
     with qtbot.waitSignal(model.dataChanged):
-        model.set_auto_tag_statuses({SONG: "pending", OTHER: "tagged"})
-    model.set_auto_tag_statuses({SONG: "failed"})
+        model.set_auto_tag_statuses({SONG: AutoTagCell("pending"), OTHER: AutoTagCell("tagged")})
+    model.set_auto_tag_statuses({SONG: AutoTagCell("failed", "broken")})
     model.set_files([OTHER, SONG], ROOT)
     assert model.data(model.index(0, AUTO_TAG_COLUMN)) == "tagged"
     assert model.data(model.index(1, AUTO_TAG_COLUMN)) == "failed"
+    assert model.data(model.index(1, AUTO_TAG_COLUMN), Qt.ItemDataRole.ToolTipRole) == "broken"
+    assert model.data(model.index(0, AUTO_TAG_COLUMN), Qt.ItemDataRole.ToolTipRole) is None
+    assert model.data(model.index(0, 0), Qt.ItemDataRole.ToolTipRole) is None
 
 
 def test_auto_tag_statuses_on_empty_model_emit_nothing(qtbot: QtBot):
     model = LibraryTableModel(make_tag_cache(FakeTagStore()))
     with qtbot.assertNotEmitted(model.dataChanged):
-        model.set_auto_tag_statuses({SONG: "pending"})
+        model.set_auto_tag_statuses({SONG: AutoTagCell("pending")})
 
 
 def test_auto_tag_column_is_not_editable_or_colored():

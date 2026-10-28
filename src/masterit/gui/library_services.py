@@ -31,6 +31,7 @@ class LibraryServices:
     tag_store: TagStore
     cover_store: CoverStore
     root_store: LibraryRootStore
-    tagger: Tagger | None = None
+    # Called when a run starts, on the GUI thread, so settings changed meanwhile apply.
+    make_tagger: Callable[[], Tagger]
     confirm_move: MoveConfirmation = confirm_move
     confirm_repack: RepackConfirmation = confirm_repack

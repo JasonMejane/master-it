@@ -6,11 +6,13 @@ from PySide6.QtCore import QItemSelectionModel, QThreadPool
 from PySide6.QtWidgets import QFileDialog, QWidget
 from pytestqt.qtbot import QtBot
 
+from masterit.cancellation import CancelToken
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.library_services import LibraryServices
 from masterit.gui.move_action import MoveConfirmation
 from masterit.library.relocation import RelocationPlan
 from masterit.repack.pipeline import RepackPlan
+from masterit.tagging.events import TaggerEventHandler
 from masterit.tagging.tagger import Tagger
 from masterit.tags.cover_store import CoverStore
 from masterit.tags.tag_store import TagStore
@@ -54,6 +56,7 @@ def make_panel(
     tagger: Tagger | None = None,
     root_store: FakeRootStore | None = None,
     cover_store: CoverStore | None = None,
+    make_tagger: Callable[[], Tagger] | None = None,
 ) -> LibraryPanel:
     services = LibraryServices(
         get_download_folder=lambda: download_folder,
@@ -62,7 +65,7 @@ def make_panel(
         tag_store=tag_store or FakeTagStore(),
         cover_store=cover_store or FakeCoverStore(),
         root_store=root_store or FakeRootStore(),
-        tagger=tagger,
+        make_tagger=make_tagger or (lambda: tagger or UnusedTagger()),
         confirm_move=confirm_move,
         confirm_repack=confirm_repack_always,
     )
@@ -93,3 +96,10 @@ def select_rows(panel: LibraryPanel, *rows: int) -> None:
 def get_names(panel: LibraryPanel) -> list[object]:
     model = panel.table_model
     return [model.data(model.index(row, 0)) for row in range(model.rowCount())]
+
+
+class UnusedTagger:
+    def tag(
+        self, paths: list[Path], on_event: TaggerEventHandler, cancel_token: CancelToken
+    ) -> None:
+        raise AssertionError("no tagger expected in this test")

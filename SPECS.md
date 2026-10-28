@@ -3,7 +3,7 @@
 ## Goal
 
 GUI to download audio from YouTube links with yt-dlp, then optionally repack the
-results (clean names, move, tag) into a library that SoundTag can maintain.
+results (clean names, move, tag) into a library, tagged from online music services.
 
 ## User flow
 
@@ -53,11 +53,15 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
   Writes run in the background like moves; closing waits for them.
 - **Cover**: read-only view above the tag form showing the selection's embedded cover (front
   cover preferred); "<multiple covers>" when they differ, "No cover" when there is none.
-- **Auto-tag**: "Auto-tag selected" runs `soundtag --json --overwrite <files>` in the
-  background; an "Auto-tag" column shows each file's status for the session (pending,
-  tagged, skipped, failed, stopped) and tag columns refresh. Cancel stops SoundTag after
-  its current file; closing the app cancels, then waits. Disabled with a hint when
-  `soundtag` is not on PATH.
+- **Auto-tag**: "Auto-tag selected" looks each file up in Discogs, ListenBrainz,
+  MusicBrainz, Deezer, iTunes and Last.fm (YouTube thumbnails as a last-resort cover) in
+  the background and overwrites its tags and cover with what the services find; a file in
+  an `<Artist> - <Album>` folder brings its whole album, tagged from one album lookup. An
+  "Auto-tag" column shows each file's status for the session (pending, tagged, skipped,
+  failed, stopped), with the reason of a skip or failure as its tooltip, and tag columns
+  refresh. Cancel stops after the current file; "Stop now" abandons it at its next wait
+  or request; closing the app cancels, then waits (a second close stops now). API keys
+  are set in "Settings…"; Deezer and iTunes need none.
 - **Repack**: "Repack selected" moves files into the library layout
   `<Root>/<Artist>/<Artist> - <Title>.<ext>` built from their tags (characters Windows
   refuses become "-", leading dots/spaces and trailing dots/spaces dropped, reserved
@@ -69,13 +73,11 @@ results (clean names, move, tag) into a library that SoundTag can maintain.
 ## Decisions
 
 - **GUI**: PySide6; core is Qt-free and tested without a display.
-- **Library layout**: SoundTag's — `<Root>/<Artist>/<Artist> - <Title>.<ext>`, album
+- **Library layout**: `<Root>/<Artist>/<Artist> - <Title>.<ext>`, album
   tracks `<Root>/<Artist>/<Artist> - <Album>/<Artist> - <Title>.<ext>`. Root in settings.
-- **Auto-tagging**: `Tagger` protocol + `SoundTagCliTagger` adapter calling SoundTag
-  as a subprocess. SoundTag gets a `--json` option (NDJSON event per file) so the
-  coupling does not depend on its human log format. Reimplementing SoundTag
-  (~5–7k LOC of tuned matching logic) would double maintenance; a `NativeTagger`
-  can later replace the adapter behind the same protocol if needed.
+- **Auto-tagging**: `Tagger` protocol implemented by `NativeTagger`, a port of SoundTag
+  (`3e4899f`) in `tagging/` (phase 7): overwrite mode only, synchronous in the worker
+  thread, keys from QSettings read at each run (`KeyedTagger`).
 - **Window**: tabs — Download (links, output folder, format, quality, progress table) and
   Library (Phase 3). Settings and window geometry persist via QSettings; default output
   folder is the system Music folder + `YT_DL`. Download is disabled when ffmpeg is missing.
@@ -94,14 +96,15 @@ src/masterit/
   download/  YtDlpDownloader, options builder, progress events
   library/   audio listing, rename rules, destinations, relocation plan (rename/move/layout)
   tags/      TagStore (mutagen), bulk/single tag edits
-  tagging/   Tagger protocol, SoundTagCliTagger
+  tagging/   Tagger protocol, NativeTagger: web/, paths/, metadata/ (chain, providers,
+             album resolver), processing/, track tag I/O, stop guard, native_setup
   repack/    RepackPipeline: clean → move → tag
   gui/       MainWindow, tabs/panels, QThreadPool workers
 ```
 
 ## Roadmap
 
-Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7e, 7f tag I/O and processing done).
+Status (2026-10-27): phases 0–7 done.
 
 0. Scaffold — done (`ba9e9c7`).
 1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
@@ -130,7 +133,7 @@ Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7e, 7f tag I/O
       counts, cover writes through `MutagenCoverStore`, written through a hidden copy that
       replaces the file, as SoundTag does) — done; processing (`tagging/processing/`: single
       and album tracks, overwrite policy, `NativeTagger` emitting the tagger events with a
-      reason per file) — done; settings dialog, wiring, adapter removed. File names with undecodable bytes become U+FFFD before searching, as
+      reason per file) — done; settings dialog, wiring, adapter removed — done. File names with undecodable bytes become U+FFFD before searching, as
       Node reads them. API keys in a "Settings…" menu dialog (no import from SoundTag's
       `.env`); the MusicBrainz User-Agent defaults to `MasterIt/<version> ( <repo URL> )`.
       WAV files fail with a reason, as in the manual tag editor.
@@ -143,17 +146,10 @@ Known limits:
   may stall.
 - Editing a multi-value tag writes the typed text as a single value; the layout uses it
   joined ("A; B") as the artist folder.
-- SoundTag reports no reason for a failed file in its JSON events (it stays in its log).
 - A file inside an album folder (`<Artist> - <Album>`) brings its whole album into the
-  SoundTag run; those extra files get statuses too.
-- Moves of a repack cannot be cancelled, only the tagging after them. Cancel stops
-  SoundTag after its current file; a second Cancel (or second close) stops it at once.
-- Two stops within 200 ms count as one in SoundTag, so a fast double click only stops it
-  after the current file.
-- Windows: SoundTag only handles SIGINT, so the first Cancel already stops it at once
-  (CTRL_BREAK).
-- Windows: `soundtag` is an npm `.cmd` wrapper run through cmd.exe, where file names with
-  `&`, `%` or `^` can break the command line (not handled yet; Linux is the target).
+  auto-tag run; those extra files get statuses too.
+- Moves of a repack cannot be cancelled, only the tagging after them. "Stop now" cannot
+  interrupt a request already sent: it ends within that request's timeout.
 - Auto-tag requests: the timeout bounds each socket operation and is checked again once
   headers and each body chunk arrive, so a stalling service can exceed it by one socket
   timeout; DNS lookups are not bounded.

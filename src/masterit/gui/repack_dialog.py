@@ -32,7 +32,7 @@ def format_repack_summary(plan: RepackPlan, root: Path) -> str:
         return f"Nothing can be repacked into {root}."
     skipped_count = len(plan.moves.entries) - move_count
     skipped = f" {skipped_count} will be skipped." if skipped_count else ""
-    question = f"Move {move_count} file(s) into {root}, then auto-tag {tag_count} with SoundTag"
+    question = f"Move {move_count} file(s) into {root}, then auto-tag {tag_count}"
     return f"{question} (existing tags are replaced)?{skipped}"
 
 

@@ -27,7 +27,7 @@ def get_ok_button(dialog: RepackDialog) -> QWidget:
 def test_dialog_lists_moves_files_in_place_and_skipped_files(qtbot: QtBot):
     dialog = make_dialog(qtbot, RepackPlan(RelocationPlan((MOVE, SKIP)), (IN_PLACE,)))
     assert dialog.summary_label.text() == (
-        "Move 1 file(s) into /library, then auto-tag 2 with SoundTag"
+        "Move 1 file(s) into /library, then auto-tag 2"
         " (existing tags are replaced)? 1 will be skipped."
     )
     assert dialog.details.toPlainText() == (
@@ -47,7 +47,7 @@ def test_dialog_without_files_to_tag_cannot_be_confirmed(qtbot: QtBot):
 def test_dialog_with_files_in_place_only_offers_tagging(qtbot: QtBot):
     dialog = make_dialog(qtbot, RepackPlan(RelocationPlan(()), (IN_PLACE,)))
     assert dialog.summary_label.text() == (
-        "Move 0 file(s) into /library, then auto-tag 1 with SoundTag (existing tags are replaced)?"
+        "Move 0 file(s) into /library, then auto-tag 1 (existing tags are replaced)?"
     )
 
 

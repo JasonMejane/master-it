@@ -115,7 +115,7 @@ def test_repack_job_reports_moves_done_before_a_crash(
     assert tagger.calls == []
 
 
-def test_repack_job_without_files_to_tag_skips_soundtag(tmp_path: Path):
+def test_repack_job_without_files_to_tag_skips_the_tagger(tmp_path: Path):
     tagger = FakeTagger()
     plan = make_repack_plan([], tmp_path / "lib", lambda path: {})
     job = make_repack_job_from(plan, tmp_path, tagger)

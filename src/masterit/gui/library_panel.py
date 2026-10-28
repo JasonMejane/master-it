@@ -27,6 +27,7 @@ from masterit.library.relocation import (
     RelocationPlan,
     replace_relocated_paths,
 )
+from masterit.tagging.run_tracker import AutoTagCell
 from masterit.tags.fields import Tags
 from masterit.tags.tag_cache import TagCache, make_tag_cache
 from masterit.tags.tag_edits import TagOutcome
@@ -113,7 +114,7 @@ class LibraryPanel(QWidget):
         self.tag_form.load_selection()
         self.show_status(format_tag_summary(outcomes))
 
-    def show_auto_tag_statuses(self, statuses: Mapping[Path, str]) -> None:
+    def show_auto_tag_statuses(self, statuses: Mapping[Path, AutoTagCell]) -> None:
         self.table_model.set_auto_tag_statuses(statuses)
 
     def refresh_tags(self, paths: Iterable[Path]) -> None:

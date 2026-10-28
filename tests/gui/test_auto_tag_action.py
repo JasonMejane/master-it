@@ -78,16 +78,14 @@ def make_session_panel(
     return panel
 
 
-def test_actions_are_disabled_without_soundtag(qtbot: QtBot, tmp_path: Path):
-    panel = make_session_panel(qtbot, tmp_path, None)
+def test_actions_start_idle_and_need_a_selection(qtbot: QtBot, tmp_path: Path):
+    tagger = FakeTagger()
+    panel = make_session_panel(qtbot, tmp_path, tagger)
     action = panel.auto_tag_action
-    assert not action.repack_button.isEnabled()
-    assert not action.auto_tag_button.isEnabled()
-    assert action.auto_tag_button.toolTip() == "SoundTag not found on PATH"
+    assert action.auto_tag_button.isEnabled()
     assert not action.cancel_button.isEnabled()
-    select_rows(panel, 0)
     action.start_auto_tag()
-    action.start_repack()
+    assert tagger.calls == []
     assert not panel.is_busy
 
 
@@ -131,6 +129,20 @@ def test_auto_tag_shows_statuses_summary_and_new_tags(qtbot: QtBot, tmp_path: Pa
     assert not panel.is_busy
 
 
+def test_builds_a_tagger_for_each_run_with_a_selection(qtbot: QtBot, tmp_path: Path):
+    tagger = FakeTagger()
+    builds: list[str] = []
+    panel = make_session_panel(
+        qtbot, tmp_path, tagger, make_tagger=lambda: builds.append("tagger") or tagger
+    )
+    panel.auto_tag_action.start_auto_tag()
+    select_rows(panel, 0)
+    for _ in range(2):
+        with qtbot.waitSignal(panel.work_finished, timeout=2000):
+            panel.auto_tag_action.auto_tag_button.click()
+    assert builds == ["tagger", "tagger"]
+
+
 def test_repack_moves_into_library_then_tags(
     qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -167,7 +179,14 @@ def test_repack_without_root_asks_for_one(
 
 def test_declined_repack_changes_nothing(qtbot: QtBot, tmp_path: Path):
     tagger = FakeTagger()
-    panel = make_session_panel(qtbot, tmp_path, tagger, root_store=FakeRootStore(tmp_path / "lib"))
+    builds: list[str] = []
+    panel = make_session_panel(
+        qtbot,
+        tmp_path,
+        tagger,
+        root_store=FakeRootStore(tmp_path / "lib"),
+        make_tagger=lambda: builds.append("tagger") or tagger,
+    )
     plans: list[RepackPlan] = []
 
     def decline(parent: object, plan: RepackPlan, root: Path) -> bool:
@@ -179,6 +198,7 @@ def test_declined_repack_changes_nothing(qtbot: QtBot, tmp_path: Path):
     panel.auto_tag_action.repack_button.click()
     assert len(plans[0].moves.valid_entries) == 1
     assert tagger.calls == []
+    assert builds == []
     assert (tmp_path / "dl" / "song.mp3").exists()
 
 
@@ -201,7 +221,7 @@ def test_cancel_stops_auto_tag_and_marks_unprocessed_files(qtbot: QtBot, tmp_pat
         with qtbot.waitSignal(panel.work_finished, timeout=2000):
             action.cancel_button.click()
             assert panel.status_label.text() == (
-                "Stopping after the current file… (Stop now quits at once)"
+                "Stopping after the current file… (Stop now abandons it)"
             )
             assert action.cancel_button.text() == "Stop now"
     assert get_cell(panel, 0, AUTO_TAG_COLUMN) == "stopped"

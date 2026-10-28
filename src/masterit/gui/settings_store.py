@@ -1,9 +1,13 @@
+from dataclasses import fields
 from pathlib import Path
 from typing import cast
 
 from PySide6.QtCore import QByteArray, QSettings
 
 from masterit.download.settings import AUDIO_QUALITIES, AudioCodec, DownloadSettings
+from masterit.tagging.native_setup import TaggerKeys, get_default_user_agent
+
+KEY_NAMES = tuple(field.name for field in fields(TaggerKeys))
 
 
 def parse_codec(value: str) -> AudioCodec:
@@ -37,6 +41,20 @@ class SettingsStore:
 
     def save_library_root(self, root: Path) -> None:
         self._settings.setValue("library/root", str(root))
+
+    def load_tagger_keys(self) -> TaggerKeys:
+        defaults = TaggerKeys(get_default_user_agent())
+        values = {
+            name: self._read(f"tagging/{name}", getattr(defaults, name)) for name in KEY_NAMES
+        }
+        return TaggerKeys(**values)
+
+    def save_tagger_keys(self, keys: TaggerKeys) -> None:
+        for name in KEY_NAMES:
+            self._settings.setValue(f"tagging/{name}", getattr(keys, name))
+        # Left unsaved, the default User-Agent keeps following the app version.
+        if keys.musicbrainz_user_agent.strip() == get_default_user_agent():
+            self._settings.remove("tagging/musicbrainz_user_agent")
 
     def load_window_geometry(self) -> QByteArray | None:
         geometry = self._settings.value("window/geometry")

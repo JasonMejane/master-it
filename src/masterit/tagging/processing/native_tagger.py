@@ -17,6 +17,7 @@ from masterit.tagging.paths.terms import AlbumTrack, AlbumUnit, TrackPlan
 from masterit.tagging.processing.album_track import AlbumTrackTagger
 from masterit.tagging.processing.single_track import SingleTrackTagger, TrackFinder
 from masterit.tagging.processing.track_write import TagFiles, TrackOutcome
+from masterit.tagging.stop_guard import RunAbortedError, StopGuard
 
 type TrackTagging = Callable[[AlbumTrack], TrackOutcome]
 
@@ -61,6 +62,8 @@ class AlbumSupplier:
         search = AlbumSearch(self._unit.artist, self._unit.album)
         try:
             return self._albums.resolve(search, get_folder_file_count(self._unit))
+        except RunAbortedError:
+            raise
         except Exception as error:
             return describe_error(error)
 
@@ -69,6 +72,8 @@ class AlbumSupplier:
 def tag_safely(tag_track: TrackTagging, track: AlbumTrack) -> TrackOutcome:
     try:
         return tag_track(track)
+    except RunAbortedError:
+        raise
     except Exception as error:
         return TrackOutcome(AutoTagStatus.FAILED, describe_error(error))
 
@@ -82,10 +87,20 @@ class BatchRun:
 
     def process(self, tracks: list[AlbumTrack], tag_track: TrackTagging) -> bool:
         for track in tracks:
-            if self._cancel_token.is_cancelled:
+            outcome = self._try_tag(track, tag_track)
+            if outcome is None:
                 return False
-            self._record(track.path, tag_safely(tag_track, track))
+            self._record(track.path, outcome)
         return True
+
+    # None once stopped: before the file, or while it runs after a second stop.
+    def _try_tag(self, track: AlbumTrack, tag_track: TrackTagging) -> TrackOutcome | None:
+        if self._cancel_token.is_cancelled:
+            return None
+        try:
+            return tag_safely(tag_track, track)
+        except RunAbortedError:
+            return None
 
     def make_finished(self) -> TaggingFinished:
         return TaggingFinished(
@@ -108,7 +123,9 @@ class NativeTagger:
         albums: AlbumFinder,
         files: TagFiles,
         list_album_files: AlbumFileLister,
+        stop_guard: StopGuard | None = None,
     ) -> None:
+        self._stop_guard = stop_guard or StopGuard()
         self._finder = finder
         self._albums = albums
         self._list_album_files = list_album_files
@@ -118,6 +135,7 @@ class NativeTagger:
     def tag(
         self, paths: list[Path], on_event: TaggerEventHandler, cancel_token: CancelToken
     ) -> None:
+        self._stop_guard.watch(cancel_token)
         try:
             self._run(paths, on_event, cancel_token)
         finally:

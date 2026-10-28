@@ -16,11 +16,16 @@ from masterit.tagging.metadata.types import (
     ExistingTags,
     TrackInfo,
     TrackMetadata,
+    TrackSearch,
 )
+from masterit.tagging.native_setup import TaggerKeys, make_native_tagger
 from masterit.tagging.processing.native_tagger import NativeTagger
+from masterit.tagging.stop_guard import RunAbortedError, StopGuard
 from masterit.tagging.track_tags import TrackTagStore
+from masterit.tagging.web.transport import HttpRequest, HttpResponse
 
 from ...tags.fixtures import copy_fixture
+from ..web.fakes import FakeTransport, make_json_response
 from .fakes import FakeAlbumFinder, FakeTagFiles, FakeTrackFinder
 
 ARTIST = Path("/library/Queen")
@@ -201,3 +206,41 @@ def test_tags_real_files_of_an_album_and_a_single(tmp_path: Path):
     assert store.read(album_song).info == TrackInfo("Mustapha", "Queen", "Jazz", "1978")
     assert store.read_cover(album_song) == b"\xff\xd8\xffcover"
     assert store.read(single).info == FOUND.info
+
+
+def test_abandons_the_current_file_on_a_second_stop():
+    token = CancelToken()
+    guard = StopGuard()
+    run = Run()
+
+    class AbortingFinder(FakeTrackFinder):
+        def find(self, search: TrackSearch, existing: ExistingTags, replace_cover: bool = False):
+            token.cancel()
+            token.cancel()
+            guard.ensure_running()
+            return None
+
+    run.tagger = NativeTagger(AbortingFinder([]), run.albums, run.files, lambda _f: [], guard)
+    run.tagger.tag([SINGLE, ARTIST / "Queen - Other.mp3"], run.events.append, token)
+    assert run.events == [TaggingStarted(2), TaggingFinished(0, 0, 0, 2, True)]
+
+
+def test_abandons_an_album_file_when_its_lookup_is_stopped():
+    run = Run(album=RunAbortedError())
+    events = run.tag(JAZZ_TRACKS)
+    assert events == [TaggingStarted(2), TaggingFinished(0, 0, 0, 2, False)]
+
+
+def test_a_second_stop_during_a_real_lookup_abandons_the_file(tmp_path: Path):
+    song = copy_fixture(tmp_path, "mp3", "Queen - Radio Ga Ga")
+    token = CancelToken()
+
+    def answer_then_stop_twice(_request: HttpRequest) -> HttpResponse:
+        token.cancel()
+        token.cancel()
+        return make_json_response({"data": []})
+
+    tagger = make_native_tagger(TaggerKeys("MasterIt/1.0"), FakeTransport(answer_then_stop_twice))
+    events: list[TaggerEvent] = []
+    tagger.tag([song], events.append, token)
+    assert events == [TaggingStarted(1), TaggingFinished(0, 0, 0, 1, True)]

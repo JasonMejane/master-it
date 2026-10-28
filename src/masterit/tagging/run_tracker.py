@@ -1,4 +1,5 @@
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -8,10 +9,17 @@ from masterit.tagging.events import (
     TaggingFailed,
     TaggingFinished,
     TaggingStarted,
-    TaggingStopped,
 )
 
-type Statuses = dict[Path, str]
+
+# The reason tells why a file was skipped or failed.
+@dataclass(frozen=True)
+class AutoTagCell:
+    status: str
+    reason: str = ""
+
+
+type Statuses = dict[Path, AutoTagCell]
 
 PENDING = "pending"
 STOPPED = "stopped"
@@ -38,7 +46,7 @@ class AutoTagRun:
     def add_pending(self, paths: Iterable[Path]) -> Statuses:
         new_paths = list(paths)
         self._pending.extend(new_paths)
-        return dict.fromkeys(new_paths, PENDING)
+        return dict.fromkeys(new_paths, AutoTagCell(PENDING))
 
     def apply(self, event: TaggerEvent) -> Statuses:
         handlers: dict[type, Callable[[Any], Statuses]] = {
@@ -46,14 +54,13 @@ class AutoTagRun:
             FileAutoTagged: self._record_file,
             TaggingFinished: self._finish_run,
             TaggingFailed: self._fail_run,
-            TaggingStopped: self._stop_run,
         }
         return handlers[type(event)](cast(Any, event))
 
     def finish(self) -> Statuses:
         processed = set(self.processed)
         unfinished = [path for path in self._pending if path not in processed]
-        return dict.fromkeys(unfinished, STOPPED)
+        return dict.fromkeys(unfinished, AutoTagCell(STOPPED))
 
     def _start(self, event: TaggingStarted) -> Statuses:
         self._total = event.total
@@ -61,7 +68,7 @@ class AutoTagRun:
 
     def _record_file(self, event: FileAutoTagged) -> Statuses:
         self.processed.append(event.path)
-        return {event.path: str(event.status)}
+        return {event.path: AutoTagCell(str(event.status), event.reason)}
 
     def _finish_run(self, event: TaggingFinished) -> Statuses:
         self.summary = describe_finished(event)
@@ -69,8 +76,4 @@ class AutoTagRun:
 
     def _fail_run(self, event: TaggingFailed) -> Statuses:
         self.summary = f"Auto-tag failed: {event.message}"
-        return {}
-
-    def _stop_run(self, event: TaggingStopped) -> Statuses:
-        self.summary = "Auto-tag stopped."
         return {}

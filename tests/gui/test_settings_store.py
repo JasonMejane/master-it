@@ -4,6 +4,7 @@ from PySide6.QtCore import QByteArray, QSettings
 
 from masterit.download.settings import AudioCodec, DownloadSettings
 from masterit.gui.settings_store import SettingsStore
+from masterit.tagging.native_setup import TaggerKeys, get_default_user_agent
 
 
 def make_store(tmp_path: Path) -> SettingsStore:
@@ -63,3 +64,22 @@ def test_library_root_is_unset_by_default(tmp_path: Path):
 def test_saved_library_root_is_loaded_back(tmp_path: Path):
     make_store(tmp_path).save_library_root(Path("/music/Library, Main"))
     assert make_store(tmp_path).load_library_root() == Path("/music/Library, Main")
+
+
+def test_tagger_keys_default_to_the_app_user_agent(tmp_path: Path):
+    assert make_store(tmp_path).load_tagger_keys() == TaggerKeys(get_default_user_agent())
+
+
+def test_saved_tagger_keys_are_loaded_back(tmp_path: Path):
+    keys = TaggerKeys("Agent, with comma", "token", "key", "secret", "lastfm", "youtube")
+    make_store(tmp_path).save_tagger_keys(keys)
+    assert make_store(tmp_path).load_tagger_keys() == keys
+
+
+def test_the_default_user_agent_is_not_frozen_by_saving(tmp_path: Path):
+    store = make_store(tmp_path)
+    store.save_tagger_keys(TaggerKeys(f" {get_default_user_agent()} "))
+    raw = QSettings(str(tmp_path / "test.conf"), QSettings.Format.IniFormat)
+    assert not raw.contains("tagging/musicbrainz_user_agent")
+    store.save_tagger_keys(TaggerKeys(""))
+    assert make_store(tmp_path).load_tagger_keys().musicbrainz_user_agent == ""

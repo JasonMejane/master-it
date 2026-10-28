@@ -75,6 +75,10 @@ class AlbumResolver:
         self._order = order
         self._services = services
 
+    @property
+    def order(self) -> AlbumSourceOrder:
+        return self._order
+
     # Sibling disc folders ask for the same album, so it is kept for the batch.
     def resolve(self, search: AlbumSearch, file_count: int | None = None) -> AlbumData:
         return self._services.cache.get_or_load(

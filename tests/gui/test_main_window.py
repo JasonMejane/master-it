@@ -7,14 +7,14 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog
 from pytestqt.qtbot import QtBot
 
-from masterit.gui import main_window, tag_job
+from masterit.gui import tag_job
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.library_services import LibraryServices
-from masterit.gui.main_window import MainWindow, make_main_window, make_soundtag_tagger
+from masterit.gui.main_window import MainWindow, make_app_tagger, make_main_window
 from masterit.gui.settings_store import SettingsStore
 from masterit.library import move_work
 from masterit.library.relocation import RelocationOutcome
-from masterit.tagging.soundtag_cli import SoundTagCliTagger
+from masterit.tagging.native_setup import TaggerKeys
 from masterit.tagging.tagger import Tagger
 from masterit.tags.fields import TagField, Tags
 from masterit.tags.tag_edits import TagOutcome
@@ -22,7 +22,7 @@ from masterit.tags.tag_store import TagStore
 
 from ..tags.fakes import FakeCoverStore, FakeTagStore
 from .fakes import BlockingDownloader, make_panel, make_store
-from .library_helpers import FakeRootStore, choose, confirm_always, select_rows
+from .library_helpers import FakeRootStore, UnusedTagger, choose, confirm_always, select_rows
 from .test_auto_tag_action import FakeTagger
 
 
@@ -60,7 +60,7 @@ def make_library(tmp_path: Path, tagger: Tagger | None = None) -> LibraryPanel:
         tag_store=FakeTagStore(),
         cover_store=FakeCoverStore(),
         root_store=FakeRootStore(),
-        tagger=tagger,
+        make_tagger=lambda: tagger or UnusedTagger(),
         confirm_move=confirm_always,
     )
     return LibraryPanel(services)
@@ -192,15 +192,38 @@ def find_nothing(name: str) -> str | None:
     return None
 
 
-def find_soundtag(name: str) -> str | None:
-    return "/usr/bin/soundtag"
+def test_the_app_tagger_uses_the_saved_keys(tmp_path: Path):
+    store = make_store(tmp_path)
+    store.save_tagger_keys(TaggerKeys("Agent"))
+    built: list[TaggerKeys] = []
+
+    def make_tagger(keys: TaggerKeys) -> Tagger:
+        built.append(keys)
+        return FakeTagger()
+
+    make_app_tagger(store, make_tagger)()
+    assert built == [TaggerKeys("Agent")]
 
 
-def test_soundtag_tagger_needs_soundtag_on_path(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(main_window.shutil, "which", find_nothing)
-    assert make_soundtag_tagger() is None
-    monkeypatch.setattr(main_window.shutil, "which", find_soundtag)
-    assert isinstance(make_soundtag_tagger(), SoundTagCliTagger)
+def test_settings_action_saves_the_edited_keys(qtbot: QtBot, tmp_path: Path):
+    store = make_store(tmp_path)
+    edited: list[TaggerKeys] = []
+
+    def edit(_parent: object, keys: TaggerKeys) -> TaggerKeys | None:
+        edited.append(keys)
+        return TaggerKeys("New agent") if len(edited) == 1 else None
+
+    window = MainWindow(
+        store,
+        make_panel(store, lambda settings: BlockingDownloader()),
+        make_library(tmp_path),
+        edit,
+    )
+    qtbot.addWidget(window)
+    window.settings_action.trigger()
+    window.settings_action.trigger()
+    assert edited[1] == TaggerKeys("New agent")
+    assert store.load_tagger_keys() == TaggerKeys("New agent")
 
 
 def test_closing_while_auto_tagging_cancels_then_closes(qtbot: QtBot, tmp_path: Path):

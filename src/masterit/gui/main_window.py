@@ -1,28 +1,36 @@
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import override
 
 from PySide6.QtCore import QSettings, QStandardPaths, QThreadPool
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QMainWindow, QTabWidget
+from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget
 
 from masterit.download.downloader import YtDlpDownloader
 from masterit.gui.download_panel import DownloadPanel
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.library_services import LibraryServices
+from masterit.gui.settings_dialog import edit_tagger_keys
 from masterit.gui.settings_store import SettingsStore
-from masterit.tagging.soundtag_cli import SoundTagCliTagger
-from masterit.tagging.subprocess_process import start_subprocess
+from masterit.tagging.native_setup import TaggerKeys, make_native_tagger
 from masterit.tagging.tagger import Tagger
 from masterit.tags.cover_store import MutagenCoverStore
 from masterit.tags.tag_store import MutagenTagStore
 
+type KeysEditor = Callable[[QWidget | None, TaggerKeys], TaggerKeys | None]
+
 
 class MainWindow(QMainWindow):
     def __init__(
-        self, store: SettingsStore, download_panel: DownloadPanel, library_panel: LibraryPanel
+        self,
+        store: SettingsStore,
+        download_panel: DownloadPanel,
+        library_panel: LibraryPanel,
+        edit_keys: KeysEditor = edit_tagger_keys,
     ) -> None:
         super().__init__()
+        self._edit_keys = edit_keys
         self.setWindowTitle("MasterIt")
         self._store = store
         self.download_panel = download_panel
@@ -33,7 +41,14 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(library_panel, "Library")
         download_panel.file_downloaded.connect(library_panel.add_downloaded_file)
         self.setCentralWidget(self.tabs)
+        self.settings_action = self.menuBar().addAction("Settings…")
+        self.settings_action.triggered.connect(self._edit_settings)
         self._restore_geometry()
+
+    def _edit_settings(self) -> None:
+        keys = self._edit_keys(self, self._store.load_tagger_keys())
+        if keys is not None:
+            self._store.save_tagger_keys(keys)
 
     @override
     def closeEvent(self, event: QCloseEvent) -> None:
@@ -51,7 +66,7 @@ class MainWindow(QMainWindow):
     def _close_when_idle(self, event: QCloseEvent) -> None:
         event.ignore()
         if self._is_closing:
-            # A second close stops SoundTag at once instead of after its current file.
+            # A second close abandons the file being auto-tagged instead of finishing it.
             self.library_panel.stop_work()
             return
         self._is_closing = True
@@ -79,9 +94,10 @@ def get_default_output_dir() -> Path:
     return Path(QStandardPaths.writableLocation(location)) / "YT_DL"
 
 
-def make_soundtag_tagger() -> Tagger | None:
-    executable = shutil.which("soundtag")
-    return None if executable is None else SoundTagCliTagger(start_subprocess, Path(executable))
+def make_app_tagger(
+    store: SettingsStore, make_tagger: Callable[[TaggerKeys], Tagger] = make_native_tagger
+) -> Callable[[], Tagger]:
+    return lambda: make_tagger(store.load_tagger_keys())
 
 
 def make_main_window(settings: QSettings) -> MainWindow:
@@ -102,7 +118,7 @@ def make_main_window(settings: QSettings) -> MainWindow:
         tag_store=MutagenTagStore(),
         cover_store=MutagenCoverStore(),
         root_store=store,
-        tagger=make_soundtag_tagger(),
+        make_tagger=make_app_tagger(store),
     )
     library_panel = LibraryPanel(services)
     return MainWindow(store, download_panel, library_panel)

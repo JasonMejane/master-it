@@ -14,12 +14,10 @@ from masterit.library.relocation import RelocationOutcome
 from masterit.repack.pipeline import RepackPlan, make_repack_plan
 from masterit.tagging.events import TaggerEvent
 from masterit.tagging.run_tracker import AutoTagRun
-from masterit.tagging.tagger import Tagger
 
-NO_SOUNDTAG_HINT = "SoundTag not found on PATH"
 STOPPING_NOTICE = "Stopping after the current file."
 STOP_MESSAGES = (
-    "Stopping after the current file… (Stop now quits at once)",
+    "Stopping after the current file… (Stop now abandons it)",
     "Stopping now…",
 )
 
@@ -54,7 +52,7 @@ class AutoTagAction(QWidget):
         return self._job is not None
 
     def set_busy(self, busy: bool) -> None:
-        can_start = self._services.tagger is not None and not busy
+        can_start = not busy
         self.repack_button.setEnabled(can_start)
         self.auto_tag_button.setEnabled(can_start)
         self.root_button.setEnabled(not busy)
@@ -70,18 +68,17 @@ class AutoTagAction(QWidget):
         return root
 
     def start_repack(self) -> None:
-        tagger = self._get_ready_tagger("Select files to repack.")
-        if tagger is None:
+        if not self._has_selection("Select files to repack."):
             return
         root = self._services.root_store.load_library_root() or self.choose_root()
         if root is not None:
-            self._confirm_and_repack(root, tagger)
+            self._confirm_and_repack(root)
 
     def start_auto_tag(self) -> None:
-        tagger = self._get_ready_tagger("Select files to auto-tag.")
-        if tagger is None:
+        if not self._has_selection("Select files to auto-tag."):
             return
         paths = self._context.get_selected_paths()
+        tagger = self._services.make_tagger()
         self._start_job(create_auto_tag_job(tagger, paths, self._renew_cancel_token()))
         self._context.show_auto_tag_statuses(self._run.add_pending(paths))
 
@@ -94,23 +91,22 @@ class AutoTagAction(QWidget):
         self.cancel_button.setText("Stop now")
         self.cancel_button.setEnabled(self._stop_requests < len(STOP_MESSAGES))
 
-    def _get_ready_tagger(self, missing_selection: str) -> Tagger | None:
-        if self._services.tagger is None:
-            return None
-        if not self._context.get_selected_paths():
-            self._context.show_status(missing_selection)
-            return None
-        return self._services.tagger
+    def _has_selection(self, missing_selection: str) -> bool:
+        if self._context.get_selected_paths():
+            return True
+        self._context.show_status(missing_selection)
+        return False
 
-    def _confirm_and_repack(self, root: Path, tagger: Tagger) -> None:
+    def _confirm_and_repack(self, root: Path) -> None:
         # Read after the root dialog: its event loop may have changed the files.
         paths = self._context.get_selected_paths()
         plan = make_repack_plan(paths, root, self._context.get_tags)
         if self.confirm_repack(self, plan, root):
-            self._start_repack_job(plan, tagger)
+            self._start_repack_job(plan)
 
-    def _start_repack_job(self, plan: RepackPlan, tagger: Tagger) -> None:
+    def _start_repack_job(self, plan: RepackPlan) -> None:
         services = self._services
+        tagger = services.make_tagger()
         download_folder = services.get_download_folder()
         protection = make_download_protection(download_folder, services.is_downloading)
         cleanup_root = self._context.opened_folder or download_folder
@@ -178,9 +174,6 @@ class AutoTagAction(QWidget):
         self.repack_button = QPushButton("Repack selected")
         self.auto_tag_button = QPushButton("Auto-tag selected")
         self.cancel_button = QPushButton("Cancel")
-        if self._services.tagger is None:
-            self.repack_button.setToolTip(NO_SOUNDTAG_HINT)
-            self.auto_tag_button.setToolTip(NO_SOUNDTAG_HINT)
 
     def _build_layout(self) -> None:
         layout = QHBoxLayout(self)

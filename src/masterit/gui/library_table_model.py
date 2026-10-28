@@ -13,6 +13,7 @@ from PySide6.QtGui import QColor
 
 from masterit.gui.tag_labels import TAG_LABELS
 from masterit.library.relocation import Relocation, RelocationPlan
+from masterit.tagging.run_tracker import AutoTagCell
 from masterit.tags.fields import TagField, Tags
 from masterit.tags.tag_cache import TagCache
 
@@ -26,6 +27,7 @@ NAME_COLUMN = 0
 PREVIEW_COLUMN = 1
 FIRST_TAG_COLUMN = len(FILE_HEADERS)
 AUTO_TAG_COLUMN = FIRST_TAG_COLUMN + len(TAG_COLUMNS)
+NO_AUTO_TAG = AutoTagCell("")
 ROOT = QModelIndex()
 PROBLEM_COLOR = QColor(Qt.GlobalColor.red)
 PENDING_COLOR = QColor(Qt.GlobalColor.blue)
@@ -58,7 +60,7 @@ class LibraryTableModel(QAbstractTableModel):
         self._tag_preview_paths: set[Path] = set()
         self._tag_edits: Tags = {}
         # Kept across reloads: it reports this session's runs, keyed by the files' final paths.
-        self._auto_tag_statuses: dict[Path, str] = {}
+        self._auto_tag_statuses: dict[Path, AutoTagCell] = {}
         self._files: list[Path] = []
         self._root: Path | None = None
         self._folder_texts: dict[Path, str] = {}
@@ -107,7 +109,7 @@ class LibraryTableModel(QAbstractTableModel):
         self._tag_cache.forget(paths)
         self._emit_tags_changed()
 
-    def set_auto_tag_statuses(self, statuses: Mapping[Path, str]) -> None:
+    def set_auto_tag_statuses(self, statuses: Mapping[Path, AutoTagCell]) -> None:
         self._auto_tag_statuses.update(statuses)
         self._emit_tags_changed()
 
@@ -160,6 +162,7 @@ class LibraryTableModel(QAbstractTableModel):
             Qt.ItemDataRole.DisplayRole: self._get_display_text,
             Qt.ItemDataRole.EditRole: self._get_edit_text,
             Qt.ItemDataRole.ForegroundRole: self._get_foreground,
+            Qt.ItemDataRole.ToolTipRole: self._get_tool_tip,
         }
         handler = handlers.get(Qt.ItemDataRole(role))
         return None if handler is None else handler(path, column)
@@ -169,7 +172,7 @@ class LibraryTableModel(QAbstractTableModel):
         if field is not None:
             return self._get_tag_text(path, field)
         if column == AUTO_TAG_COLUMN:
-            return self._auto_tag_statuses.get(path, "")
+            return self._auto_tag_statuses.get(path, NO_AUTO_TAG).status
         texts = (path.name, get_preview_text(self._preview.get(path)), self._folder_texts[path])
         return texts[column]
 
@@ -180,6 +183,11 @@ class LibraryTableModel(QAbstractTableModel):
 
     def _is_tag_pending(self, path: Path, field: TagField) -> bool:
         return path in self._tag_preview_paths and field in self._tag_edits
+
+    def _get_tool_tip(self, path: Path, column: int) -> str | None:
+        if column != AUTO_TAG_COLUMN:
+            return None
+        return self._auto_tag_statuses.get(path, NO_AUTO_TAG).reason or None
 
     def _get_edit_text(self, path: Path, column: int) -> str:
         return path.stem

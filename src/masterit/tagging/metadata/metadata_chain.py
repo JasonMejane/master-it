@@ -69,6 +69,14 @@ class MetadataChain:
         self._cover_providers = cover_providers
         self._services = services
 
+    @property
+    def providers(self) -> Sequence[MetadataProvider]:
+        return self._providers
+
+    @property
+    def cover_providers(self) -> Sequence[CoverProvider]:
+        return self._cover_providers
+
     def clear_cache(self) -> None:
         self._services.images.clear()
         self._services.cache.clear()

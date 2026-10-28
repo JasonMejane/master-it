@@ -36,12 +36,5 @@ class TaggingFailed:
     message: str
 
 
-@dataclass(frozen=True)
-class TaggingStopped:
-    """Cancelled before SoundTag could report a summary."""
-
-
-type TaggerEvent = (
-    TaggingStarted | FileAutoTagged | TaggingFinished | TaggingFailed | TaggingStopped
-)
+type TaggerEvent = TaggingStarted | FileAutoTagged | TaggingFinished | TaggingFailed
 type TaggerEventHandler = Callable[[TaggerEvent], None]
