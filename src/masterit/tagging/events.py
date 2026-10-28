@@ -19,6 +19,7 @@ class TaggingStarted:
 class FileAutoTagged:
     path: Path
     status: AutoTagStatus
+    reason: str = ""
 
 
 @dataclass(frozen=True)

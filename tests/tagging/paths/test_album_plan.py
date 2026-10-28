@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -152,3 +153,9 @@ def test_disc_folder_number_ends_at_any_non_ascii_word_character():
     found = find_album_folder(ALBUM_FOLDER / "CD1枚目" / "a.mp3")
     assert found is not None
     assert found.disc == 1
+
+
+def test_reads_album_labels_from_readable_folder_names():
+    folder = ROOT / os.fsdecode(b"A\xe9") / os.fsdecode(b"A\xe8 - Caf\xe9")
+    found = find_album_folder(folder / "01 - Song.mp3")
+    assert found == AlbumFolder(folder, "A\ufffd", "Caf\ufffd", None)

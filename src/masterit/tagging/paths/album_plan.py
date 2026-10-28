@@ -5,6 +5,7 @@ from pathlib import Path
 from masterit.tagging.ascii_words import WORD_END
 from masterit.tagging.paths.absolute_path import make_absolute
 from masterit.tagging.paths.library_path import clean_folder_album, is_same_folder_name
+from masterit.tagging.paths.readable_path import make_readable_path
 from masterit.tagging.paths.terms import AlbumFolder, AlbumTrack, AlbumUnit, TrackPlan
 from masterit.tagging.paths.track_name import split_label
 
@@ -53,13 +54,15 @@ def read_track_disc(file: Path, folder: Path) -> int | None:
     return read_disc_folder(file) or read_disc(read_album_name(folder), DISC_SUFFIX)
 
 
+# Labels come from readable names; the folder stays as it is on disk, to list and write.
 def find_album_folder(file: Path) -> AlbumFolder | None:
     resolved = make_absolute(file)
     folder = get_album_folder_path(resolved)
-    artist, album = read_album_label(folder)
-    if not (album and is_below_artist(folder, artist)):
+    readable = make_readable_path(folder)
+    artist, album = read_album_label(readable)
+    if not (album and is_below_artist(readable, artist)):
         return None
-    return AlbumFolder(folder, artist, album, read_track_disc(resolved, folder))
+    return AlbumFolder(folder, artist, album, read_track_disc(resolved, readable))
 
 
 # The album a folder belongs to: itself, or the album above its disc folder.

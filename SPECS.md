@@ -101,7 +101,7 @@ src/masterit/
 
 ## Roadmap
 
-Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7e done).
+Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7e, 7f tag I/O and processing done).
 
 0. Scaffold — done (`ba9e9c7`).
 1. Download core (yt-dlp faked in tests) — done (`dba3f8a`).
@@ -128,9 +128,9 @@ Status (2026-10-27): phases 0–6 done; phase 7 in progress (7a–7e done).
    e. Album sources (Deezer, MusicBrainz, Discogs) and the album resolver — done.
    f. In three commits: tag I/O for the tagger (`tagging/track_tags.py`: info, extras with
       counts, cover writes through `MutagenCoverStore`, written through a hidden copy that
-      replaces the file, as SoundTag does) — done;
-      processing (album tracks, write policy) and `NativeTagger`; settings dialog, wiring,
-      adapter removed. File names with undecodable bytes become U+FFFD before searching, as
+      replaces the file, as SoundTag does) — done; processing (`tagging/processing/`: single
+      and album tracks, overwrite policy, `NativeTagger` emitting the tagger events with a
+      reason per file) — done; settings dialog, wiring, adapter removed. File names with undecodable bytes become U+FFFD before searching, as
       Node reads them. API keys in a "Settings…" menu dialog (no import from SoundTag's
       `.env`); the MusicBrainz User-Agent defaults to `MasterIt/<version> ( <repo URL> )`.
       WAV files fail with a reason, as in the manual tag editor.
