@@ -73,6 +73,12 @@ def test_leaves_unknown_artist_and_album_out_of_the_search():
     assert service.get_query(0)["query"] == 'recording:"Title"'
 
 
+def test_escapes_backslashes_and_quotes_in_search_terms():
+    service = ScriptedService([answer_recordings])
+    service.client.search_recordings(TrackSearch('a\\b"c\\'))
+    assert service.get_query(0)["query"] == r'recording:"a\\b\"c\\"'
+
+
 def test_returns_no_recordings_when_the_list_is_missing():
     service = ScriptedService([lambda: make_json_response({})])
     assert service.client.search_recordings(SEARCH) == []

@@ -32,7 +32,7 @@ def get_musicbrainz_artist(credits: list[JsonObject]) -> str:
 
 
 def build_search_term(field: str, value: str) -> str:
-    escaped = value.replace('"', '\\"')
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'{field}:"{escaped}"'
 
 
