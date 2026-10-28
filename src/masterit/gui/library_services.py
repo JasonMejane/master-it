@@ -6,14 +6,17 @@ from typing import Protocol
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QWidget
 
+from masterit.gui.album_dialog import ask_album
 from masterit.gui.move_action import MoveConfirmation
 from masterit.gui.move_dialog import confirm_move
 from masterit.gui.repack_dialog import confirm_repack
+from masterit.library.library_layout import AlbumTarget
 from masterit.repack.pipeline import RepackPlan
 from masterit.tagging.tagger import Tagger
 from masterit.tags.cover_store import CoverStore
 from masterit.tags.tag_store import TagStore
 
+type AlbumQuestion = Callable[[QWidget, AlbumTarget], AlbumTarget | None]
 type RepackConfirmation = Callable[[QWidget, RepackPlan, Path], bool]
 
 
@@ -34,4 +37,5 @@ class LibraryServices:
     # Called when a run starts, on the GUI thread, so settings changed meanwhile apply.
     make_tagger: Callable[[], Tagger]
     confirm_move: MoveConfirmation = confirm_move
+    ask_album: AlbumQuestion = ask_album
     confirm_repack: RepackConfirmation = confirm_repack

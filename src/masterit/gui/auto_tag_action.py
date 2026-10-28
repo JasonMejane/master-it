@@ -11,7 +11,7 @@ from masterit.gui.library_services import LibraryServices
 from masterit.gui.move_action import make_download_protection
 from masterit.gui.summaries import format_relocation_summary
 from masterit.library.relocation import RelocationOutcome
-from masterit.repack.pipeline import RepackPlan, make_repack_plan
+from masterit.repack.pipeline import RepackPlan, make_repack_plan, make_suggested_album
 from masterit.tagging.events import TaggerEvent
 from masterit.tagging.run_tracker import AutoTagRun
 
@@ -34,6 +34,7 @@ class AutoTagAction(QWidget):
         super().__init__()
         self._context = context
         self._services = services
+        self.ask_album = services.ask_album
         self.confirm_repack = services.confirm_repack
         self._job: TagRunJob | None = None
         self._stop_requests = 0
@@ -98,9 +99,14 @@ class AutoTagAction(QWidget):
         return False
 
     def _confirm_and_repack(self, root: Path) -> None:
-        # Read after the root dialog: its event loop may have changed the files.
+        read_tags = self._context.get_tags
+        suggestion = make_suggested_album(self._context.get_selected_paths(), read_tags)
+        target = self.ask_album(self, suggestion)
+        if target is None:
+            return
+        # Read after the dialogs: their event loops may have changed the files.
         paths = self._context.get_selected_paths()
-        plan = make_repack_plan(paths, root, self._context.get_tags)
+        plan = make_repack_plan(paths, root, target, read_tags)
         if self.confirm_repack(self, plan, root):
             self._start_repack_job(plan)
 

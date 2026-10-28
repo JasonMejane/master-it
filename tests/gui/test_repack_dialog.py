@@ -10,7 +10,7 @@ from masterit.repack.pipeline import RepackPlan
 
 ROOT = Path("/library")
 MOVE = Relocation(Path("/dl/a.mp3"), ROOT / "Queen" / "Queen - A.mp3")
-SKIP = Relocation(Path("/dl/b.mp3"), Path("/dl/b.mp3"), RelocationProblem.MISSING_TAGS)
+SKIP = Relocation(Path("/dl/b.mp3"), Path("/dl/b.mp3"), RelocationProblem.MISSING_TITLE)
 IN_PLACE = ROOT / "ABBA" / "ABBA - SOS.opus"
 
 
@@ -32,7 +32,7 @@ def test_dialog_lists_moves_files_in_place_and_skipped_files(qtbot: QtBot):
     )
     assert dialog.details.toPlainText() == (
         "a.mp3 → Queen/Queen - A.mp3\n"
-        "b.mp3 — skipped: No artist or title tag\n"
+        "b.mp3 — skipped: No title tag\n"
         "ABBA - SOS.opus — already in place"
     )
     assert get_ok_button(dialog).isEnabled()

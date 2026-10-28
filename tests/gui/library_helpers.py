@@ -10,6 +10,7 @@ from masterit.cancellation import CancelToken
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.library_services import LibraryServices
 from masterit.gui.move_action import MoveConfirmation
+from masterit.library.library_layout import AlbumTarget
 from masterit.library.relocation import RelocationPlan
 from masterit.repack.pipeline import RepackPlan
 from masterit.tagging.events import TaggerEventHandler
@@ -22,6 +23,10 @@ from ..tags.fakes import FakeCoverStore, FakeTagStore
 
 def confirm_always(parent: QWidget, plan: RelocationPlan, folder: Path) -> bool:
     return True
+
+
+def ask_jazz_album(parent: QWidget, suggestion: AlbumTarget) -> AlbumTarget:
+    return AlbumTarget("Queen", "Jazz")
 
 
 def confirm_repack_always(parent: QWidget, plan: RepackPlan, root: Path) -> bool:
@@ -67,6 +72,7 @@ def make_panel(
         root_store=root_store or FakeRootStore(),
         make_tagger=make_tagger or (lambda: tagger or UnusedTagger()),
         confirm_move=confirm_move,
+        ask_album=ask_jazz_album,
         confirm_repack=confirm_repack_always,
     )
     panel = LibraryPanel(services)

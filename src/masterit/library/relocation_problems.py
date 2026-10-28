@@ -6,4 +6,4 @@ class RelocationProblem(StrEnum):
     INVALID_NAME = 'Name starts with "." or contains / \\ : * ? " < > | or a control character'
     DUPLICATE_TARGET = "Several files would get this name"
     TARGET_EXISTS = "A file with this name already exists"
-    MISSING_TAGS = "No artist or title tag"
+    MISSING_TITLE = "No title tag"

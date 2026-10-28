@@ -7,6 +7,7 @@ from pytestqt.qtbot import QtBot
 
 from masterit.cancellation import CancelToken
 from masterit.gui.library_panel import LibraryPanel
+from masterit.library.library_layout import AlbumTarget
 from masterit.repack.pipeline import RepackPlan
 from masterit.tagging.events import (
     AutoTagStatus,
@@ -151,7 +152,7 @@ def test_repack_moves_into_library_then_tags(
     select_rows(panel, 0)
     with qtbot.waitSignal(panel.work_finished, timeout=2000):
         panel.auto_tag_action.repack_button.click()
-    target = tmp_path / "lib" / "Queen" / "Queen - Mustapha.mp3"
+    target = tmp_path / "lib" / "Queen" / "Queen - Jazz" / "Queen - Mustapha.mp3"
     assert target.exists()
     assert tagger.calls == [[target]]
     assert panel.table_model.get_path(0) == target
@@ -200,6 +201,50 @@ def test_declined_repack_changes_nothing(qtbot: QtBot, tmp_path: Path):
     assert tagger.calls == []
     assert builds == []
     assert (tmp_path / "dl" / "song.mp3").exists()
+
+
+def test_repack_asks_album_with_suggestion_and_stops_when_declined(qtbot: QtBot, tmp_path: Path):
+    tagger = FakeTagger()
+    panel = make_session_panel(qtbot, tmp_path, tagger, root_store=FakeRootStore(tmp_path / "lib"))
+    suggestions: list[AlbumTarget] = []
+    plans: list[RepackPlan] = []
+
+    def decline_album(parent: object, suggestion: AlbumTarget) -> None:
+        suggestions.append(suggestion)
+
+    def record_plan(parent: object, plan: RepackPlan, root: Path) -> bool:
+        plans.append(plan)
+        return True
+
+    panel.auto_tag_action.ask_album = decline_album
+    panel.auto_tag_action.confirm_repack = record_plan
+    select_rows(panel, 0)
+    panel.auto_tag_action.repack_button.click()
+    assert suggestions == [AlbumTarget("Queen", "")]
+    assert plans == []
+    assert tagger.calls == []
+    assert (tmp_path / "dl" / "song.mp3").exists()
+
+
+def test_repack_reads_selection_again_after_album_dialog(qtbot: QtBot, tmp_path: Path):
+    panel = make_session_panel(
+        qtbot, tmp_path, FakeTagger(), root_store=FakeRootStore(tmp_path / "lib")
+    )
+    plans: list[RepackPlan] = []
+
+    def clear_selection(parent: object, suggestion: AlbumTarget) -> AlbumTarget:
+        panel.table_view.clearSelection()
+        return AlbumTarget("Queen", "Jazz")
+
+    def record_plan(parent: object, plan: RepackPlan, root: Path) -> bool:
+        plans.append(plan)
+        return False
+
+    panel.auto_tag_action.ask_album = clear_selection
+    panel.auto_tag_action.confirm_repack = record_plan
+    select_rows(panel, 0)
+    panel.auto_tag_action.repack_button.click()
+    assert plans[0].moves.entries == ()
 
 
 def test_cancel_stops_auto_tag_and_marks_unprocessed_files(qtbot: QtBot, tmp_path: Path):

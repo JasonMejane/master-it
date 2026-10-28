@@ -5,6 +5,7 @@ import pytest
 from masterit.cancellation import CancelToken
 from masterit.gui.auto_tag_jobs import TagRunJob, create_auto_tag_job, create_repack_job
 from masterit.library import move_work
+from masterit.library.library_layout import AlbumTarget
 from masterit.library.relocation import RelocationOutcome
 from masterit.repack.pipeline import RepackPlan, make_repack_plan
 from masterit.tagging.events import (
@@ -15,6 +16,7 @@ from masterit.tagging.events import (
 )
 from masterit.tags.fields import TagField
 
+JAZZ = AlbumTarget("Queen", "Jazz")
 FINISHED = TaggingFinished(tagged=1, skipped=0, failed=0, unprocessed=0, stopped=False)
 
 
@@ -61,7 +63,7 @@ def make_repack_job(tmp_path: Path, tagger: FakeTagger, token: CancelToken) -> T
     source.parent.mkdir()
     source.touch()
     tags = {TagField.ARTIST: "Queen", TagField.TITLE: "Mustapha"}
-    plan = make_repack_plan([source], tmp_path / "lib", lambda path: tags)
+    plan = make_repack_plan([source], tmp_path / "lib", JAZZ, lambda path: tags)
     return create_repack_job(plan, tmp_path / "dl", lambda folder: False, tagger, token)
 
 
@@ -78,7 +80,7 @@ def test_repack_job_moves_then_tags_moved_files(tmp_path: Path):
     job.signals.move_progress.connect(record_progress)
     emitted = record(job)
     job.run()
-    target = tmp_path / "lib" / "Queen" / "Queen - Mustapha.mp3"
+    target = tmp_path / "lib" / "Queen" / "Queen - Jazz" / "Queen - Mustapha.mp3"
     assert moved == [[RelocationOutcome(tmp_path / "dl" / "song.mp3", target)]]
     assert progress == [(1, 1)]
     assert tagger.calls == [[target]]
@@ -117,7 +119,7 @@ def test_repack_job_reports_moves_done_before_a_crash(
 
 def test_repack_job_without_files_to_tag_skips_the_tagger(tmp_path: Path):
     tagger = FakeTagger()
-    plan = make_repack_plan([], tmp_path / "lib", lambda path: {})
+    plan = make_repack_plan([], tmp_path / "lib", JAZZ, lambda path: {})
     job = make_repack_job_from(plan, tmp_path, tagger)
     emitted = record(job)
     job.run()

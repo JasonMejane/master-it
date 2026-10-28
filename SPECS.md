@@ -62,19 +62,22 @@ results (clean names, move, tag) into a library, tagged from online music servic
   refresh. Cancel stops after the current file; "Stop now" abandons it at its next wait
   or request; closing the app cancels, then waits (a second close stops now). API keys
   are set in "Settings…"; Deezer and iTunes need none.
-- **Repack**: "Repack selected" moves files into the library layout
-  `<Root>/<Artist>/<Artist> - <Title>.<ext>` built from their tags (characters Windows
-  refuses become "-", leading dots/spaces and trailing dots/spaces dropped, reserved
-  device names such as "Con" get a "_", names cut to 255 bytes; files without artist or
-  title are skipped), then auto-tags the moved files and those already in place. One
+- **Repack**: "Repack selected" asks for an artist and an album (prefilled with the
+  album artist, else artist, and album shared by all selected files) and moves files into
+  `<Root>/<Artist>/<Artist> - <Album>/<Artist> - <Title>.<ext>`, the title read from tags
+  (characters Windows refuses become "-", leading dots/spaces and trailing dots/spaces
+  dropped, reserved device names such as "Con" get a "_", names cut to 255 bytes; files
+  without title are skipped; an artist containing " - ", "–" or "—" is refused, as the
+  tagger would split the album folder there; albums named like "CD 1" or "Singles" are
+  accepted but not looked up as albums, as are artists named like "CD1"), then auto-tags the moved files and those already in place. One
   confirmation lists moves, files in place and skips. The library root is picked in the
   Library tab (asked on first repack) and saved in settings.
 
 ## Decisions
 
 - **GUI**: PySide6; core is Qt-free and tested without a display.
-- **Library layout**: `<Root>/<Artist>/<Artist> - <Title>.<ext>`, album
-  tracks `<Root>/<Artist>/<Artist> - <Album>/<Artist> - <Title>.<ext>`. Root in settings.
+- **Library layout**: `<Root>/<Artist>/<Artist> - <Album>/<Artist> - <Title>.<ext>`, the
+  artist cut to 120 bytes. Root in settings.
 - **Auto-tagging**: `Tagger` protocol implemented by `NativeTagger`, a port of SoundTag
   (`3e4899f`) in `tagging/` (phase 7): overwrite mode only, synchronous in the worker
   thread, keys from QSettings read at each run (`KeyedTagger`).
