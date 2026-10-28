@@ -3,9 +3,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import override
 
-from PySide6.QtCore import QSettings, QStandardPaths, QThreadPool
-from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget
+from PySide6.QtCore import QSettings, QStandardPaths, Qt, QThreadPool
+from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
+from PySide6.QtWidgets import QMainWindow, QTabWidget, QToolButton, QWidget
 
 from masterit.download.downloader import YtDlpDownloader
 from masterit.gui.download_panel import DownloadPanel
@@ -41,9 +41,25 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(library_panel, "Library")
         download_panel.file_downloaded.connect(library_panel.add_downloaded_file)
         self.setCentralWidget(self.tabs)
-        self.settings_action = self.menuBar().addAction("Settings…")
-        self.settings_action.triggered.connect(self._edit_settings)
+        self.settings_action = self._make_settings_action()
+        self.tabs.setCornerWidget(self._make_settings_button(), Qt.Corner.TopRightCorner)
         self._restore_geometry()
+
+    def _make_settings_action(self) -> QAction:
+        icon = QIcon.fromTheme("configure", QIcon.fromTheme("preferences-system"))
+        action = QAction(icon, "Settings", self)
+        action.setShortcut(QKeySequence("Ctrl+,"))
+        shortcut = action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
+        action.setToolTip(f"Settings ({shortcut})")
+        action.triggered.connect(self._edit_settings)
+        self.addAction(action)
+        return action
+
+    def _make_settings_button(self) -> QToolButton:
+        button = QToolButton()
+        button.setDefaultAction(self.settings_action)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        return button
 
     def _edit_settings(self) -> None:
         keys = self._edit_keys(self, self._store.load_tagger_keys())

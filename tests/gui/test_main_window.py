@@ -2,9 +2,10 @@ import threading
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QSettings, QStandardPaths, QThreadPool
+from PySide6.QtCore import QSettings, QStandardPaths, Qt, QThreadPool
+from PySide6.QtGui import QKeySequence
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QFileDialog, QToolButton
 from pytestqt.qtbot import QtBot
 
 from masterit.gui import tag_job
@@ -242,6 +243,59 @@ def test_settings_action_saves_the_edited_keys(qtbot: QtBot, tmp_path: Path):
     window.settings_action.trigger()
     assert edited[1] == TaggerKeys("New agent")
     assert store.load_tagger_keys() == TaggerKeys("New agent")
+
+
+def make_window_counting_edits(qtbot: QtBot, tmp_path: Path, edits: list[TaggerKeys]) -> MainWindow:
+    store = make_store(tmp_path)
+
+    def edit(_parent: object, keys: TaggerKeys) -> TaggerKeys | None:
+        edits.append(keys)
+        return None
+
+    window = MainWindow(
+        store,
+        make_panel(store, lambda settings: BlockingDownloader()),
+        make_library(tmp_path),
+        edit,
+    )
+    qtbot.addWidget(window)
+    return window
+
+
+def get_settings_button(window: MainWindow) -> QToolButton:
+    button = window.tabs.cornerWidget(Qt.Corner.TopRightCorner)
+    assert isinstance(button, QToolButton)
+    return button
+
+
+def test_settings_button_beside_the_tabs_opens_the_editor(qtbot: QtBot, tmp_path: Path):
+    edits: list[TaggerKeys] = []
+    window = make_window_counting_edits(qtbot, tmp_path, edits)
+    window.show()
+    QTest.mouseClick(get_settings_button(window), Qt.MouseButton.LeftButton)
+    assert len(edits) == 1
+
+
+def test_settings_button_is_raised_with_text_and_shortcut_hint(qtbot: QtBot, tmp_path: Path):
+    window = make_window(qtbot, tmp_path)
+    button = get_settings_button(window)
+    shortcut = QKeySequence("Ctrl+,").toString(QKeySequence.SequenceFormat.NativeText)
+    assert button.text() == "Settings"
+    assert button.toolTip() == f"Settings ({shortcut})"
+    assert button.toolButtonStyle() == Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+    assert not button.autoRaise()
+
+
+def test_ctrl_comma_opens_settings_from_a_child_widget(qtbot: QtBot, tmp_path: Path):
+    edits: list[TaggerKeys] = []
+    window = make_window_counting_edits(qtbot, tmp_path, edits)
+    window.show()
+    window.activateWindow()
+    qtbot.waitUntil(window.isActiveWindow)
+    links = window.download_panel.url_input
+    links.setFocus()
+    QTest.keyClick(links, Qt.Key.Key_Comma, Qt.KeyboardModifier.ControlModifier)
+    assert len(edits) == 1
 
 
 def test_closing_while_auto_tagging_cancels_then_closes(qtbot: QtBot, tmp_path: Path):
