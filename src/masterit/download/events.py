@@ -37,5 +37,21 @@ class ItemFailed:
     message: str
 
 
-type DownloadEvent = ItemQueued | ItemProgress | ItemCompleted | ItemFailed
+@dataclass(frozen=True)
+class ItemSkipped:
+    source_url: str
+    item: ItemRef | None
+
+
+@dataclass(frozen=True)
+class LinkStarted:
+    """yt-dlp took the link: from now on, skipping the whole link is too late."""
+
+    source_url: str
+    item: None = None
+
+
+type DownloadEvent = (
+    ItemQueued | ItemProgress | ItemCompleted | ItemFailed | ItemSkipped | LinkStarted
+)
 type EventHandler = Callable[[DownloadEvent], None]

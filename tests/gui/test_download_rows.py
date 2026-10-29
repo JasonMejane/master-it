@@ -10,7 +10,10 @@ from masterit.download.events import (
     ItemProgress,
     ItemQueued,
     ItemRef,
+    ItemSkipped,
+    LinkStarted,
 )
+from masterit.download.skip_list import SkipList
 from masterit.gui.download_rows import (
     DownloadRow,
     DownloadRows,
@@ -165,3 +168,129 @@ def test_pending_rows_left_at_the_end_failed():
     rows.mark_pending_failed()
     assert rows.get_row(0).status == RowStatus.DOWNLOADING
     assert rows.get_row(1) == DownloadRow("b", RowStatus.FAILED, 0.0, "Not downloaded")
+
+
+def make_queued_rows() -> DownloadRows:
+    rows = DownloadRows()
+    rows.add_links(["a"])
+    rows.apply(ItemQueued("a", SONG))
+    rows.apply(ItemQueued("a", OTHER))
+    return rows
+
+
+def test_toggling_skip_on_pending_item_requests_skip():
+    rows, skip_list = make_queued_rows(), SkipList()
+    rows.toggle_skip(1, skip_list)
+    assert rows.get_row(1).status == RowStatus.SKIP_REQUESTED
+    assert skip_list.is_skipped("a", OTHER.item_id)
+
+
+def test_toggling_skip_again_restores_pending_item():
+    rows, skip_list = make_queued_rows(), SkipList()
+    rows.toggle_skip(1, skip_list)
+    rows.toggle_skip(1, skip_list)
+    assert rows.get_row(1).status == RowStatus.PENDING
+    assert not skip_list.is_skipped("a", OTHER.item_id)
+
+
+def test_pending_link_can_be_skipped():
+    rows, skip_list = DownloadRows(), SkipList()
+    rows.add_links(["a"])
+    rows.toggle_skip(0, skip_list)
+    assert skip_list.is_skipped("a", None)
+
+
+def test_started_rows_cannot_be_skipped():
+    rows, skip_list = DownloadRows(), SkipList()
+    rows.apply(ItemProgress("a", SONG, 5.0))
+    assert not rows.can_toggle_skip(0)
+    rows.toggle_skip(0, skip_list)
+    assert rows.get_row(0).status == RowStatus.DOWNLOADING
+    assert not skip_list.is_skipped("a", SONG.item_id)
+
+
+def test_only_pending_and_skip_requested_rows_can_toggle():
+    rows = make_queued_rows()
+    rows.toggle_skip(1, SkipList())
+    assert rows.can_toggle_skip(0)
+    assert rows.can_toggle_skip(1)
+
+
+def test_skipped_item_row_is_final():
+    rows = make_queued_rows()
+    rows.toggle_skip(0, SkipList())
+    assert rows.apply(ItemSkipped("a", SONG)) == 0
+    assert rows.get_row(0) == DownloadRow("Song", RowStatus.SKIPPED, 0.0, "")
+    assert not rows.can_toggle_skip(0)
+
+
+def test_skipped_link_takes_its_pending_row():
+    rows = DownloadRows()
+    rows.add_links(["a"])
+    rows.toggle_skip(0, SkipList())
+    assert rows.apply(ItemSkipped("a", None)) == 0
+    assert rows.get_row(0) == DownloadRow("a", RowStatus.SKIPPED, 0.0, "")
+
+
+def test_link_started_before_its_skip_is_replaced_by_its_items():
+    rows = DownloadRows()
+    rows.add_links(["a"])
+    rows.toggle_skip(0, SkipList())
+    assert rows.apply(ItemQueued("a", SONG)) == 0
+    assert get_titles(rows) == ["Song"]
+
+
+@pytest.mark.parametrize(
+    "finish", [DownloadRows.mark_unfinished_cancelled, DownloadRows.mark_pending_failed]
+)
+def test_skip_requests_left_at_the_end_are_skipped(finish: Any):
+    rows = make_queued_rows()
+    rows.toggle_skip(0, SkipList())
+    finish(rows)
+    assert rows.get_row(0).status == RowStatus.SKIPPED
+
+
+def test_summary_counts_skipped_rows():
+    rows = make_queued_rows()
+    rows.apply(ItemSkipped("a", SONG))
+    assert rows.get_summary().skipped == 1
+
+
+def test_started_link_cannot_be_skipped():
+    rows = DownloadRows()
+    rows.add_links(["a"])
+    assert rows.apply(LinkStarted("a")) == 0
+    assert rows.get_row(0) == DownloadRow("a", RowStatus.STARTED, 0.0, "")
+    assert not rows.can_toggle_skip(0)
+
+
+def test_started_link_is_replaced_by_its_first_item():
+    rows = DownloadRows()
+    rows.add_links(["a"])
+    rows.apply(LinkStarted("a"))
+    assert rows.apply(ItemQueued("a", SONG)) == 0
+    assert get_titles(rows) == ["Song"]
+
+
+def test_link_started_while_skip_was_requested_is_started():
+    rows = DownloadRows()
+    rows.add_links(["a"])
+    rows.toggle_skip(0, SkipList())
+    rows.apply(LinkStarted("a"))
+    assert rows.get_row(0).status == RowStatus.STARTED
+
+
+def test_started_link_without_items_fails_at_the_end():
+    rows = DownloadRows()
+    rows.add_links(["a"])
+    rows.apply(LinkStarted("a"))
+    rows.mark_pending_failed()
+    assert rows.get_row(0) == DownloadRow("a", RowStatus.FAILED, 0.0, "Not downloaded")
+
+
+def test_started_link_is_cancelled():
+    rows = DownloadRows()
+    rows.add_links(["a"])
+    rows.apply(LinkStarted("a"))
+    rows.mark_unfinished_cancelled()
+    assert rows.get_row(0).status == RowStatus.CANCELLED

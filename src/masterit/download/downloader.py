@@ -11,6 +11,7 @@ from masterit.download.events import EventHandler
 from masterit.download.hooks import UrlEventReporter
 from masterit.download.options import make_ydl_options
 from masterit.download.settings import DownloadSettings
+from masterit.download.skip_list import SkipList
 
 
 class YdlSession(AbstractContextManager["YdlSession"], Protocol):
@@ -31,15 +32,27 @@ class YtDlpDownloader:
         self._settings = settings
         self._ydl_factory = ydl_factory
 
-    def download(self, urls: list[str], on_event: EventHandler, cancel_token: CancelToken) -> None:
+    def download(
+        self,
+        urls: list[str],
+        on_event: EventHandler,
+        cancel_token: CancelToken,
+        skip_list: SkipList,
+    ) -> None:
         try:
             for url in takewhile(lambda _: not cancel_token.is_cancelled, urls):
-                self._download_url(url, on_event, cancel_token)
+                reporter = UrlEventReporter(
+                    url, on_event, cancel_token, skip_list, self._settings.codec
+                )
+                self._download_unless_skipped(url, reporter)
         except DownloadCancelled:
             return
 
-    def _download_url(self, url: str, on_event: EventHandler, cancel_token: CancelToken) -> None:
-        reporter = UrlEventReporter(url, on_event, cancel_token, self._settings.codec)
+    def _download_unless_skipped(self, url: str, reporter: UrlEventReporter) -> None:
+        if reporter.start_link_unless_skipped():
+            self._download_url(url, reporter)
+
+    def _download_url(self, url: str, reporter: UrlEventReporter) -> None:
         try:
             with self._ydl_factory(make_ydl_options(self._settings, reporter)) as ydl:
                 ydl.download([url])

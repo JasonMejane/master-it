@@ -22,6 +22,10 @@ class ItemOutcomeTracker:
         self.finish()
         self._current = item
 
+    def drop_item(self, item: ItemRef) -> None:
+        if self._current is not None and self._current.item_id == item.item_id:
+            self._close_current()
+
     def record_error(self, message: str) -> None:
         errors = self._orphan_errors if self._current is None else self._item_errors
         errors[message] = None

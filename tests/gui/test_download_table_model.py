@@ -4,7 +4,16 @@ from PySide6.QtCore import QModelIndex, Qt
 from PySide6.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
-from masterit.download.events import ItemCompleted, ItemFailed, ItemProgress, ItemQueued, ItemRef
+from masterit.download.events import (
+    ItemCompleted,
+    ItemFailed,
+    ItemProgress,
+    ItemQueued,
+    ItemRef,
+    ItemSkipped,
+    LinkStarted,
+)
+from masterit.download.skip_list import SkipList
 from masterit.gui.download_table_model import DownloadTableModel
 
 SONG = ItemRef("id1", "Song")
@@ -155,3 +164,34 @@ def test_failing_pending_rows_of_empty_model_emits_nothing(qtbot: QtBot):
     model = DownloadTableModel()
     with qtbot.assertNotEmitted(model.dataChanged):
         model.mark_pending_failed()
+
+
+def test_skip_labels():
+    model = DownloadTableModel()
+    model.add_links(["a", "b"])
+    model.toggle_skip([0], SkipList())
+    model.apply_event(ItemSkipped("b", None))
+    assert [get_text(model, row, 1) for row in range(2)] == ["Will skip", "Skipped"]
+
+
+def test_toggling_skip_updates_view(qtbot: QtBot):
+    model = DownloadTableModel()
+    model.add_links(["a", "b"])
+    with qtbot.waitSignal(model.dataChanged):
+        model.toggle_skip([1], SkipList())
+    assert get_text(model, 1, 1) == "Will skip"
+
+
+def test_skip_is_offered_when_any_row_can_toggle():
+    model = DownloadTableModel()
+    model.add_links(["a"])
+    model.apply_event(ItemProgress("b", SONG, 1.0))
+    assert model.can_toggle_skip([1, 0])
+    assert not model.can_toggle_skip([1])
+
+
+def test_started_link_label():
+    model = DownloadTableModel()
+    model.add_links(["a"])
+    model.apply_event(LinkStarted("a"))
+    assert get_text(model, 0, 1) == "Starting"

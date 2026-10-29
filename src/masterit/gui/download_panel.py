@@ -1,8 +1,10 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QThreadPool, Signal
+from PySide6.QtCore import Qt, QThreadPool, Signal
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -20,6 +22,7 @@ from PySide6.QtWidgets import (
 from masterit.cancellation import CancelToken
 from masterit.download.events import DownloadEvent, ItemCompleted
 from masterit.download.settings import AUDIO_QUALITIES, AudioCodec, DownloadSettings
+from masterit.download.skip_list import SkipList
 from masterit.download.url_input import parse_urls
 from masterit.gui.download_job import Downloader, DownloadJob
 from masterit.gui.download_rows import DownloadSummary
@@ -40,9 +43,10 @@ def get_start_problem(urls: list[str], output_dir_text: str) -> str:
 
 
 def format_summary(summary: DownloadSummary) -> str:
+    skipped = f", {summary.skipped} skipped" if summary.skipped else ""
     return (
         f"{summary.completed} completed, {summary.with_warnings} with warnings, "
-        f"{summary.failed} failed."
+        f"{summary.failed} failed{skipped}."
     )
 
 
@@ -65,6 +69,7 @@ class DownloadPanel(QWidget):
         self._ffmpeg_available = ffmpeg_available
         self._job: DownloadJob | None = None
         self._cancel_token = CancelToken()
+        self._skip_list = SkipList()
         self._crash_message = ""
         self._build_widgets()
         self._build_layout()
@@ -83,7 +88,12 @@ class DownloadPanel(QWidget):
         self._store.save_download_settings(settings)
         self.table_model.clear()
         self.table_model.add_links(urls)
-        self._start_job(DownloadJob(self._make_downloader(settings), urls, CancelToken()))
+        downloader = self._make_downloader(settings)
+        self._start_job(DownloadJob(downloader, urls, CancelToken(), SkipList()))
+
+    def toggle_skip_selected(self) -> None:
+        self.table_model.toggle_skip(self._get_selected_rows(), self._skip_list)
+        self._update_skip_availability()
 
     def cancel_download(self) -> None:
         self._cancel_token.cancel()
@@ -101,6 +111,7 @@ class DownloadPanel(QWidget):
     def _start_job(self, job: DownloadJob) -> None:
         self._job = job
         self._cancel_token = job.cancel_token
+        self._skip_list = job.skip_list
         self._crash_message = ""
         job.signals.event_received.connect(self.table_model.apply_event)
         job.signals.event_received.connect(self._announce_downloaded_file)
@@ -139,6 +150,15 @@ class DownloadPanel(QWidget):
         for widget in (self.url_input, self.output_dir_input, self.browse_button, self.codec_input):
             widget.setEnabled(not running)
         self._update_quality_availability()
+        self._update_skip_availability()
+
+    def _get_selected_rows(self) -> list[int]:
+        return [index.row() for index in self.table_view.selectionModel().selectedRows()]
+
+    def _update_skip_availability(self) -> None:
+        can_skip = self.is_running and self.table_model.can_toggle_skip(self._get_selected_rows())
+        self.skip_button.setEnabled(can_skip)
+        self.skip_action.setEnabled(can_skip)
 
     def _show_ffmpeg_warning(self) -> None:
         if not self._ffmpeg_available:
@@ -180,10 +200,17 @@ class DownloadPanel(QWidget):
         self.quality_input.addItems(AUDIO_QUALITIES)
         self.download_button = QPushButton("Download")
         self.cancel_button = QPushButton("Cancel")
+        self.skip_button = QPushButton("Skip / Unskip")
+        self.skip_button.setToolTip("Skip the selected pending rows, or download them again")
+        self.skip_action = QAction("Skip / Unskip", self)
         self.status_label = QLabel()
         self.table_model = DownloadTableModel()
         self.table_view = QTableView()
         self.table_view.setModel(self.table_model)
+        self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.ActionsContextMenu)
+        self.table_view.addAction(self.skip_action)
         header = self.table_view.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -200,6 +227,7 @@ class DownloadPanel(QWidget):
         buttons = QHBoxLayout()
         buttons.addWidget(self.download_button)
         buttons.addWidget(self.cancel_button)
+        buttons.addWidget(self.skip_button)
         buttons.addWidget(self.status_label, stretch=1)
         layout = QVBoxLayout(self)
         layout.addLayout(form)
@@ -211,3 +239,7 @@ class DownloadPanel(QWidget):
         self.browse_button.clicked.connect(self._browse_output_dir)
         self.download_button.clicked.connect(self.start_download)
         self.cancel_button.clicked.connect(self.cancel_download)
+        self.skip_button.clicked.connect(self.toggle_skip_selected)
+        self.skip_action.triggered.connect(self.toggle_skip_selected)
+        self.table_view.selectionModel().selectionChanged.connect(self._update_skip_availability)
+        self.table_model.dataChanged.connect(self._update_skip_availability)

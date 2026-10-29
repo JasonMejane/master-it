@@ -4,29 +4,45 @@ from typing import Any
 from yt_dlp.utils import DownloadCancelled
 
 from masterit.cancellation import CancelToken
-from masterit.download.events import EventHandler, ItemProgress, ItemQueued, ItemRef
+from masterit.download.events import (
+    EventHandler,
+    ItemProgress,
+    ItemQueued,
+    ItemRef,
+    ItemSkipped,
+    LinkStarted,
+)
 from masterit.download.item_tracker import ItemOutcomeTracker
 from masterit.download.settings import AudioCodec
+from masterit.download.skip_list import SkipList
+
+SKIPPED_REASON = "Skipped by user"
 
 
 class UrlEventReporter:
     def __init__(
-        self, source_url: str, on_event: EventHandler, cancel_token: CancelToken, codec: AudioCodec
+        self,
+        source_url: str,
+        on_event: EventHandler,
+        cancel_token: CancelToken,
+        skip_list: SkipList,
+        codec: AudioCodec,
     ) -> None:
         self._source_url = source_url
         self._on_event = on_event
         self._cancel_token = cancel_token
+        self._skip_list = skip_list
         self._codec = codec
         self._tracker = ItemOutcomeTracker(source_url, on_event)
 
-    def match_filter(self, info: dict[str, Any], *, incomplete: bool) -> None:
+    def match_filter(self, info: dict[str, Any], *, incomplete: bool) -> str | None:
         self._raise_if_cancelled()
         if not info.get("id"):
-            return
+            return None
         if is_listed_entry(info):
             self._on_event(ItemQueued(self._source_url, make_item_ref(info)))
-            return
-        self._tracker.start_item(make_item_ref(info))
+            return None
+        return self._start_unless_skipped(make_item_ref(info))
 
     def on_progress(self, status: dict[str, Any]) -> None:
         self._raise_if_cancelled()
@@ -46,6 +62,13 @@ class UrlEventReporter:
     def finish(self) -> None:
         self._tracker.finish()
 
+    def start_link_unless_skipped(self) -> bool:
+        if self._skip_list.is_skipped(self._source_url, None):
+            self._on_event(ItemSkipped(self._source_url, None))
+            return False
+        self._on_event(LinkStarted(self._source_url))
+        return True
+
     def debug(self, message: str) -> None:
         pass
 
@@ -57,6 +80,14 @@ class UrlEventReporter:
 
     def error(self, message: str) -> None:
         self._tracker.record_error(message.removeprefix("ERROR: "))
+
+    def _start_unless_skipped(self, item: ItemRef) -> str | None:
+        if not self._skip_list.is_skipped(self._source_url, item.item_id):
+            self._tracker.start_item(item)
+            return None
+        self._tracker.drop_item(item)
+        self._on_event(ItemSkipped(self._source_url, item))
+        return SKIPPED_REASON
 
     def _raise_if_cancelled(self) -> None:
         if self._cancel_token.is_cancelled:

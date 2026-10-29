@@ -15,10 +15,14 @@ from masterit.download.events import (
     ItemProgress,
     ItemQueued,
     ItemRef,
+    ItemSkipped,
+    LinkStarted,
 )
+from masterit.download.hooks import SKIPPED_REASON
 from masterit.download.settings import DownloadSettings
+from masterit.download.skip_list import SkipList
 
-type Scenario = Callable[["FakeYoutubeDL", str], None]
+type Scenario = Callable[["FakeYoutubeDL", str], object]
 
 SONG = ItemRef("id1", "Song")
 OTHER = ItemRef("id2", "Other")
@@ -42,10 +46,10 @@ class FakeYoutubeDL:
             self._scenario(self, url)
         return 0
 
-    def start_item(self, item: ItemRef, incomplete: bool = False) -> None:
+    def start_item(self, item: ItemRef, incomplete: bool = False) -> str | None:
         """Resolved video info, which yt-dlp tags with its extractor."""
         info = {"id": item.item_id, "title": item.title, "extractor_key": "Youtube"}
-        self.options["match_filter"](info, incomplete=incomplete)
+        return self.options["match_filter"](info, incomplete=incomplete)
 
     def match_playlist(self, entries: list[ItemRef]) -> None:
         """Playlist info first, then every flat entry before any download, like real yt-dlp."""
@@ -57,10 +61,12 @@ class FakeYoutubeDL:
         info = {"_type": "url", "id": item.item_id, "title": item.title}
         self.options["match_filter"](info, incomplete=True)
 
-    def match_entry_to_download(self, item: ItemRef, number: int) -> None:
+    def match_entry_to_download(self, item: ItemRef, number: int) -> str | None:
         """The playlist loop adds playlist fields to the flat entry before processing it."""
         info = {"_type": "url", "id": item.item_id, "title": item.title}
-        self.options["match_filter"]({**info, "playlist_autonumber": number}, incomplete=True)
+        return self.options["match_filter"](
+            {**info, "playlist_autonumber": number}, incomplete=True
+        )
 
     def report_progress(self, status: dict[str, Any]) -> None:
         for hook in self.options["progress_hooks"]:
@@ -79,14 +85,18 @@ class FakeYoutubeDL:
 
 
 def run_download(
-    scenario: Scenario, urls: list[str], token: CancelToken | None = None
+    scenario: Scenario,
+    urls: list[str],
+    token: CancelToken | None = None,
+    skip_list: SkipList | None = None,
 ) -> list[DownloadEvent]:
+    """Events without the LinkStarted announcing each URL, which has its own test."""
     events: list[DownloadEvent] = []
     downloader = YtDlpDownloader(
         DownloadSettings(Path("/music")), lambda options: FakeYoutubeDL(options, scenario)
     )
-    downloader.download(urls, events.append, token or CancelToken())
-    return events
+    downloader.download(urls, events.append, token or CancelToken(), skip_list or SkipList())
+    return [event for event in events if not isinstance(event, LinkStarted)]
 
 
 def downloading(downloaded: int, total: int | None) -> dict[str, Any]:
@@ -277,7 +287,7 @@ def test_raised_error_fails_only_its_url():
     ]
 
 
-def run_cancelled(step: Callable[[FakeYoutubeDL], None]) -> tuple[list[str], list[DownloadEvent]]:
+def run_cancelled(step: Callable[[FakeYoutubeDL], object]) -> tuple[list[str], list[DownloadEvent]]:
     token = CancelToken()
     started: list[str] = []
 
@@ -425,3 +435,74 @@ def test_entry_without_id_is_ignored():
         ydl.options["match_filter"]({"_type": "url", "id": None, "title": "X"}, incomplete=True)
 
     assert run_download(entry_without_id, ["list"]) == []
+
+
+def make_skip_list(source_url: str, item_id: str | None) -> SkipList:
+    skip_list = SkipList()
+    skip_list.set_skipped(source_url, item_id, True)
+    return skip_list
+
+
+def test_skipped_link_is_not_downloaded_nor_started():
+    started: list[str] = []
+    events: list[DownloadEvent] = []
+    downloader = YtDlpDownloader(
+        DownloadSettings(Path("/music")),
+        lambda options: FakeYoutubeDL(options, lambda ydl, url: started.append(url)),
+    )
+    downloader.download(["a", "b"], events.append, CancelToken(), make_skip_list("a", None))
+    assert started == ["b"]
+    assert events == [ItemSkipped("a", None), LinkStarted("b")]
+
+
+def test_skipped_playlist_entry_is_refused_and_reported():
+    reasons: list[str | None] = []
+
+    def download_playlist(ydl: FakeYoutubeDL, url: str) -> None:
+        ydl.match_playlist([SONG, OTHER])
+        reasons.append(ydl.match_entry_to_download(SONG, 1))
+        reasons.append(ydl.match_entry_to_download(OTHER, 2))
+        ydl.start_item(OTHER)
+        ydl.finish_file("/music/list/Other.mp3")
+
+    events = run_download(download_playlist, ["a"], None, make_skip_list("a", SONG.item_id))
+    assert reasons == [SKIPPED_REASON, None]
+    assert events[2:] == [
+        ItemSkipped("a", SONG),
+        ItemCompleted("a", OTHER, Path("/music/list/Other.mp3")),
+    ]
+
+
+def test_item_skipped_after_it_started_is_not_reported_as_failed():
+    skip_list = SkipList()
+
+    def skip_while_resolving(ydl: FakeYoutubeDL, url: str) -> None:
+        ydl.start_item(SONG)
+        ydl.log_error("ERROR: slow format")
+        skip_list.set_skipped(url, SONG.item_id, True)
+        ydl.start_item(SONG)
+
+    assert run_download(skip_while_resolving, ["a"], None, skip_list) == [ItemSkipped("a", SONG)]
+
+
+def test_listed_entry_is_queued_even_when_skipped():
+    def list_playlist(ydl: FakeYoutubeDL, url: str) -> None:
+        ydl.match_playlist([SONG])
+
+    events = run_download(list_playlist, ["a"], None, make_skip_list("a", SONG.item_id))
+    assert events == [ItemQueued("a", SONG)]
+
+
+def test_each_link_is_announced_before_yt_dlp_starts():
+    announced: list[DownloadEvent] = []
+
+    def record_events_so_far(ydl: FakeYoutubeDL, url: str) -> None:
+        announced.extend(events)
+
+    events: list[DownloadEvent] = []
+    downloader = YtDlpDownloader(
+        DownloadSettings(Path("/music")),
+        lambda options: FakeYoutubeDL(options, record_events_so_far),
+    )
+    downloader.download(["a"], events.append, CancelToken(), SkipList())
+    assert announced == [LinkStarted("a")]

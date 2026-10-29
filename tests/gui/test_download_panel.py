@@ -15,6 +15,7 @@ from .fakes import (
     BlockingDownloader,
     CrashingDownloader,
     FailingDownloader,
+    PlaylistDownloader,
     RecordingDownloader,
     make_panel,
     make_store,
@@ -229,3 +230,60 @@ def test_failed_downloads_are_not_announced(qtbot: QtBot, tmp_path: Path):
     panel.file_downloaded.connect(downloaded.append)
     start_download(qtbot, panel)
     assert downloaded == []
+
+
+def start_playlist_download(qtbot: QtBot, tmp_path: Path) -> DownloadPanel:
+    panel = PanelFixture(qtbot, tmp_path, PlaylistDownloader()).panel
+    panel.url_input.setPlainText("https://a")
+    panel.download_button.click()
+    qtbot.waitUntil(lambda: panel.table_model.rowCount() == 2)
+    return panel
+
+
+def select_row(panel: DownloadPanel, row: int) -> None:
+    panel.table_view.clearSelection()
+    panel.table_view.selectRow(row)
+
+
+def test_skip_is_unavailable_without_running_download(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    assert not panel.skip_button.isEnabled()
+    assert not panel.skip_action.isEnabled()
+
+
+def test_skip_follows_selected_rows(qtbot: QtBot, tmp_path: Path):
+    panel = start_playlist_download(qtbot, tmp_path)
+    assert not panel.skip_button.isEnabled()
+    select_row(panel, 0)
+    assert panel.skip_button.isEnabled()
+    assert panel.skip_action.isEnabled()
+    with qtbot.waitSignal(panel.download_finished, timeout=5000):
+        panel.cancel_button.click()
+
+
+def test_skipped_row_is_not_downloaded_and_counted(qtbot: QtBot, tmp_path: Path):
+    panel = start_playlist_download(qtbot, tmp_path)
+    select_row(panel, 0)
+    with qtbot.waitSignal(panel.download_finished, timeout=5000):
+        panel.skip_button.click()
+    assert [get_status(panel, row) for row in range(2)] == ["Skipped", "Done"]
+    assert panel.status_label.text() == (
+        "Finished: 1 completed, 0 with warnings, 0 failed, 1 skipped."
+    )
+    assert not panel.skip_button.isEnabled()
+
+
+def test_skip_action_toggles_back_to_pending(qtbot: QtBot, tmp_path: Path):
+    panel = start_playlist_download(qtbot, tmp_path)
+    select_row(panel, 1)
+    panel.skip_action.trigger()
+    assert get_status(panel, 1) == "Will skip"
+    panel.skip_action.trigger()
+    assert get_status(panel, 1) == "Pending"
+    with qtbot.waitSignal(panel.download_finished, timeout=5000):
+        panel.cancel_button.click()
+
+
+def test_skip_action_is_in_row_context_menu(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    assert panel.skip_action in panel.table_view.actions()

@@ -1,10 +1,11 @@
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, override
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
 from PySide6.QtGui import QColor
 
 from masterit.download.events import DownloadEvent
+from masterit.download.skip_list import SkipList
 from masterit.gui.download_rows import (
     DownloadRow,
     DownloadRows,
@@ -20,13 +21,18 @@ ROOT = QModelIndex()
 STATUS_COLORS = {
     RowStatus.FAILED: QColor(Qt.GlobalColor.red),
     RowStatus.PENDING: QColor(Qt.GlobalColor.gray),
+    RowStatus.SKIP_REQUESTED: QColor(Qt.GlobalColor.gray),
+    RowStatus.SKIPPED: QColor(Qt.GlobalColor.gray),
 }
 STATUS_LABELS = {
     RowStatus.PENDING: "Pending",
+    RowStatus.STARTED: "Starting",
     RowStatus.COMPLETED: "Done",
     RowStatus.WARNING: "Done with warnings",
     RowStatus.FAILED: "Failed",
     RowStatus.CANCELLED: "Cancelled",
+    RowStatus.SKIP_REQUESTED: "Will skip",
+    RowStatus.SKIPPED: "Skipped",
 }
 
 
@@ -66,6 +72,14 @@ class DownloadTableModel(QAbstractTableModel):
         self.beginInsertRows(ROOT, placement.index, placement.index)
         self._rows.apply_at(event, placement)
         self.endInsertRows()
+
+    def can_toggle_skip(self, indexes: Iterable[int]) -> bool:
+        return any(self._rows.can_toggle_skip(index) for index in indexes)
+
+    def toggle_skip(self, indexes: Iterable[int], skip_list: SkipList) -> None:
+        for index in indexes:
+            self._rows.toggle_skip(index, skip_list)
+        self._emit_all_changed()
 
     def mark_unfinished_cancelled(self) -> None:
         self._rows.mark_unfinished_cancelled()

@@ -1,5 +1,6 @@
 from masterit.cancellation import CancelToken
 from masterit.download.events import ItemFailed
+from masterit.download.skip_list import SkipList
 from masterit.gui.download_job import Downloader, DownloadJob
 
 from .fakes import CrashingDownloader, FailingDownloader
@@ -7,7 +8,7 @@ from .fakes import CrashingDownloader, FailingDownloader
 
 def run_job(downloader: Downloader) -> list[object]:
     emitted: list[object] = []
-    job = DownloadJob(downloader, ["a"], CancelToken())
+    job = DownloadJob(downloader, ["a"], CancelToken(), SkipList())
     job.signals.event_received.connect(emitted.append)
     job.signals.crashed.connect(emitted.append)
     job.signals.finished.connect(lambda: emitted.append("finished"))

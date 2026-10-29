@@ -9,18 +9,31 @@ from masterit.download.events import (
     ItemFailed,
     ItemProgress,
     ItemQueued,
+    ItemSkipped,
+    LinkStarted,
 )
+from masterit.download.skip_list import SkipList
 
 NOT_DOWNLOADED_MESSAGE = "Not downloaded"
 
 
 class RowStatus(Enum):
     PENDING = auto()
+    STARTED = auto()
     DOWNLOADING = auto()
     COMPLETED = auto()
     WARNING = auto()
     FAILED = auto()
     CANCELLED = auto()
+    SKIP_REQUESTED = auto()
+    SKIPPED = auto()
+
+
+SKIP_TOGGLES = {
+    RowStatus.PENDING: RowStatus.SKIP_REQUESTED,
+    RowStatus.SKIP_REQUESTED: RowStatus.PENDING,
+}
+REPLACEABLE_LINK_STATUSES = (*SKIP_TOGGLES, RowStatus.STARTED)
 
 
 @dataclass(frozen=True)
@@ -36,6 +49,7 @@ class DownloadSummary:
     completed: int
     with_warnings: int
     failed: int
+    skipped: int = 0
 
 
 @dataclass(frozen=True)
@@ -95,15 +109,29 @@ class DownloadRows:
             self._slots[placement.index] = get_slot(event)
         return placement.index
 
+    def can_toggle_skip(self, index: int) -> bool:
+        return self._rows[index].status in SKIP_TOGGLES
+
+    def toggle_skip(self, index: int, skip_list: SkipList) -> None:
+        new_status = SKIP_TOGGLES.get(self._rows[index].status)
+        if new_status is None:
+            return
+        slot = self._slots[index]
+        is_skipped = new_status == RowStatus.SKIP_REQUESTED
+        skip_list.set_skipped(slot.source_url, slot.item_id, is_skipped)
+        self._rows[index] = replace(self._rows[index], status=new_status)
+
     def mark_unfinished_cancelled(self) -> None:
-        unfinished = (RowStatus.PENDING, RowStatus.DOWNLOADING)
+        self._settle_skip_requests()
+        unfinished = (RowStatus.PENDING, RowStatus.STARTED, RowStatus.DOWNLOADING)
         self._replace_rows(unfinished, lambda row: replace(row, status=RowStatus.CANCELLED))
 
     def mark_pending_failed(self) -> None:
         def fail(row: DownloadRow) -> DownloadRow:
             return replace(row, status=RowStatus.FAILED, details=NOT_DOWNLOADED_MESSAGE)
 
-        self._replace_rows((RowStatus.PENDING,), fail)
+        self._settle_skip_requests()
+        self._replace_rows((RowStatus.PENDING, RowStatus.STARTED), fail)
 
     def clear(self) -> None:
         self._rows.clear()
@@ -115,6 +143,7 @@ class DownloadRows:
             completed=statuses.count(RowStatus.COMPLETED) + statuses.count(RowStatus.WARNING),
             with_warnings=statuses.count(RowStatus.WARNING),
             failed=statuses.count(RowStatus.FAILED),
+            skipped=statuses.count(RowStatus.SKIPPED),
         )
 
     @singledispatchmethod
@@ -143,6 +172,15 @@ class DownloadRows:
         percent = 0.0 if previous is None else previous.percent
         return DownloadRow(title, RowStatus.FAILED, percent, event.message)
 
+    @_make_row.register
+    def _make_skipped_row(self, event: ItemSkipped, previous: DownloadRow | None) -> DownloadRow:
+        title = event.source_url if event.item is None else event.item.title
+        return DownloadRow(title, RowStatus.SKIPPED, 0.0, "")
+
+    @_make_row.register
+    def _make_started_row(self, event: LinkStarted, previous: DownloadRow | None) -> DownloadRow:
+        return DownloadRow(event.source_url, RowStatus.STARTED, 0.0, "")
+
     def _find_item_row(self, slot: RowSlot) -> int | None:
         if slot.item_id is None:
             return None
@@ -153,7 +191,7 @@ class DownloadRows:
         pending_links = (
             index
             for index, (slot, row) in enumerate(zip(self._slots, self._rows, strict=True))
-            if slot == link and row.status == RowStatus.PENDING
+            if slot == link and row.status in REPLACEABLE_LINK_STATUSES
         )
         return next(pending_links, None)
 
@@ -164,6 +202,11 @@ class DownloadRows:
     def _get_insert_index(self, url: str) -> int:
         indexes = [index for index, slot in enumerate(self._slots) if slot.source_url == url]
         return indexes[-1] + 1 if indexes else len(self._slots)
+
+    def _settle_skip_requests(self) -> None:
+        # The download is over, so a requested skip can no longer be undone.
+        skipped = (RowStatus.SKIP_REQUESTED,)
+        self._replace_rows(skipped, lambda row: replace(row, status=RowStatus.SKIPPED))
 
     def _replace_rows(
         self, statuses: tuple[RowStatus, ...], change: Callable[[DownloadRow], DownloadRow]
