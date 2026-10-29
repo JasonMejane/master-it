@@ -100,3 +100,12 @@ def test_the_default_user_agent_is_not_frozen_by_saving(tmp_path: Path):
     assert not raw.contains("tagging/musicbrainz_user_agent")
     store.save_tagger_keys(TaggerKeys(""))
     assert make_store(tmp_path).load_tagger_keys().musicbrainz_user_agent == ""
+
+
+def test_library_layout_round_trips(tmp_path: Path):
+    make_store(tmp_path).save_library_layout(QByteArray(b"layout"))
+    assert make_store(tmp_path).load_library_layout() == QByteArray(b"layout")
+
+
+def test_missing_library_layout_is_none(tmp_path: Path):
+    assert make_store(tmp_path).load_library_layout() is None

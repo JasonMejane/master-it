@@ -1,12 +1,13 @@
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QByteArray, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QSplitter,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -61,6 +62,15 @@ class LibraryPanel(QWidget):
     def is_busy(self) -> bool:
         jobs = (self.move_action.is_moving, self.tag_form.is_tagging)
         return any(jobs) or self.auto_tag_action.is_running
+
+    def get_layout_state(self) -> QByteArray | None:
+        # A splitter never shown has zero sizes, which would restore as a broken layout.
+        if not any(self.content_splitter.sizes()):
+            return None
+        return self.content_splitter.saveState()
+
+    def restore_layout_state(self, state: QByteArray) -> None:
+        self.content_splitter.restoreState(state)
 
     def stop_work(self) -> None:
         self.auto_tag_action.cancel()
@@ -156,16 +166,24 @@ class LibraryPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.addLayout(top_row)
         layout.addWidget(self.auto_tag_action)
-        side_column = QVBoxLayout()
-        side_column.addWidget(self.cover_view, alignment=Qt.AlignmentFlag.AlignHCenter)
-        side_column.addWidget(self.tag_form)
-        side_column.addStretch()
-        content_row = QHBoxLayout()
-        content_row.addWidget(self.table_view, stretch=1)
-        content_row.addLayout(side_column)
-        layout.addLayout(content_row, stretch=1)
+        layout.addWidget(self._build_content_splitter(), stretch=1)
         layout.addWidget(self.rename_bar)
         layout.addWidget(self.status_label)
+
+    def _build_content_splitter(self) -> QSplitter:
+        side_panel = QWidget()
+        side_column = QVBoxLayout(side_panel)
+        side_column.setContentsMargins(0, 0, 0, 0)
+        side_column.addWidget(self.cover_view, stretch=1)
+        side_column.addWidget(self.tag_form)
+        side_column.addStretch()
+        self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.content_splitter.addWidget(self.table_view)
+        self.content_splitter.addWidget(side_panel)
+        self.content_splitter.setChildrenCollapsible(False)
+        self.content_splitter.setStretchFactor(0, 7)
+        self.content_splitter.setStretchFactor(1, 3)
+        return self.content_splitter
 
     def _connect_signals(self) -> None:
         self.source_bar.folder_chosen.connect(self.open_folder)

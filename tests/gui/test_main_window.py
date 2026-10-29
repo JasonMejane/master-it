@@ -70,6 +70,30 @@ def test_closing_saves_geometry_and_reopening_restores_it(qtbot: QtBot, tmp_path
     assert make_window(qtbot, tmp_path).size().width() == 640
 
 
+def test_closing_saves_library_layout_and_reopening_restores_it(qtbot: QtBot, tmp_path: Path):
+    window = make_window(qtbot, tmp_path)
+    window.show()
+    window.tabs.setCurrentWidget(window.library_panel)
+    window.library_panel.content_splitter.setSizes([400, 400])
+    window.close()
+    reopened = make_window(qtbot, tmp_path)
+    reopened.show()
+    reopened.tabs.setCurrentWidget(reopened.library_panel)
+    table_width, side_width = reopened.library_panel.content_splitter.sizes()
+    assert side_width / (table_width + side_width) == pytest.approx(0.5, abs=0.05)
+
+
+def test_closing_with_library_never_shown_keeps_default_layout(qtbot: QtBot, tmp_path: Path):
+    window = make_window(qtbot, tmp_path)
+    window.show()
+    window.close()
+    reopened = make_window(qtbot, tmp_path)
+    reopened.show()
+    reopened.tabs.setCurrentWidget(reopened.library_panel)
+    table_width, side_width = reopened.library_panel.content_splitter.sizes()
+    assert side_width < table_width
+
+
 def make_library(tmp_path: Path, tagger: Tagger | None = None) -> LibraryPanel:
     services = LibraryServices(
         get_download_folder=lambda: tmp_path,

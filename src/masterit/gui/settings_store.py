@@ -65,6 +65,13 @@ class SettingsStore:
         # Saved on close, possibly right before a forced exit that skips the deferred write.
         self._settings.sync()
 
+    def load_library_layout(self) -> QByteArray | None:
+        layout = self._settings.value("window/library_layout")
+        return layout if isinstance(layout, QByteArray) else None
+
+    def save_library_layout(self, layout: QByteArray) -> None:
+        self._settings.setValue("window/library_layout", layout)
+
     def _get_default_user_agent(self) -> str:
         client_id = self._read("tagging/client_id", "")
         if not client_id:

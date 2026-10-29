@@ -187,3 +187,40 @@ def test_same_download_twice_is_listed_once(qtbot: QtBot, tmp_path: Path):
     panel.add_downloaded_file(song)
     panel.add_downloaded_file(song)
     assert get_names(panel) == ["Song.mp3"]
+
+
+def test_table_and_side_panel_share_a_splitter(qtbot: QtBot):
+    panel = make_panel(qtbot)
+    splitter = panel.content_splitter
+    side_panel = splitter.widget(1)
+    assert splitter.widget(0) is panel.table_view
+    assert side_panel is not None
+    assert side_panel.isAncestorOf(panel.tag_form)
+    assert side_panel.isAncestorOf(panel.cover_view)
+    assert not splitter.childrenCollapsible()
+
+
+def test_side_panel_takes_about_a_third_by_default(qtbot: QtBot):
+    panel = make_panel(qtbot)
+    panel.resize(1500, 800)
+    panel.show()
+    table_width, side_width = panel.content_splitter.sizes()
+    assert side_width / (table_width + side_width) == pytest.approx(0.3, abs=0.05)
+
+
+def test_layout_state_is_restored(qtbot: QtBot):
+    panel = make_panel(qtbot)
+    panel.resize(1500, 800)
+    panel.show()
+    panel.content_splitter.setSizes([700, 800])
+    restored = make_panel(qtbot)
+    restored.resize(1500, 800)
+    restored.show()
+    state = panel.get_layout_state()
+    assert state is not None
+    restored.restore_layout_state(state)
+    assert restored.content_splitter.sizes() == panel.content_splitter.sizes()
+
+
+def test_never_shown_panel_has_no_layout_state(qtbot: QtBot):
+    assert make_panel(qtbot).get_layout_state() is None

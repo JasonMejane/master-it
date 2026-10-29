@@ -5,6 +5,7 @@ from PySide6.QtCore import QBuffer, QIODevice, Qt
 from PySide6.QtGui import QColor, QImage
 from pytestqt.qtbot import QtBot
 
+from masterit.gui.cover_view import COVER_MAX_SIZE, COVER_SIZE
 from masterit.gui.library_panel import LibraryPanel
 
 from ..tags.fakes import FakeCoverStore
@@ -172,3 +173,41 @@ def test_different_cover_replaces_the_shown_one(qtbot: QtBot):
     assert get_shown_color(panel) == QColor(Qt.GlobalColor.red)
     panel.table_view.selectRow(1)
     assert get_shown_color(panel) == QColor(Qt.GlobalColor.blue)
+
+
+def show_wide_side_panel(panel: LibraryPanel, height: int) -> None:
+    panel.resize(1500, height)
+    panel.show()
+    panel.content_splitter.setSizes([800, 700])
+
+
+@pytest.mark.parametrize(("side_width", "cover_height"), [(300, 300), (700, COVER_MAX_SIZE)])
+def test_cover_height_follows_width_up_to_max(qtbot: QtBot, side_width: int, cover_height: int):
+    panel = make_cover_panel(qtbot, FakeCoverStore({}))
+    panel.resize(1500, 1200)
+    panel.show()
+    panel.content_splitter.setSizes([1500 - side_width, side_width])
+    cover_view = panel.cover_view
+    qtbot.waitUntil(lambda: cover_view.maximumHeight() == min(cover_view.width(), cover_height))
+
+
+def test_tag_form_keeps_its_height_on_short_panel(qtbot: QtBot):
+    panel = make_cover_panel(qtbot, FakeCoverStore({}))
+    show_wide_side_panel(panel, 560)
+    qtbot.wait(50)
+    assert panel.tag_form.height() >= panel.tag_form.minimumSizeHint().height()
+
+
+def test_cover_grows_with_side_panel(qtbot: QtBot):
+    panel = make_cover_panel(qtbot, FakeCoverStore({SONG_A: make_png(Qt.GlobalColor.red)}))
+    select_rows(panel, 0)
+    show_wide_side_panel(panel, 1200)
+    qtbot.waitUntil(lambda: panel.cover_view.pixmap().width() > COVER_SIZE)
+
+
+def test_text_stays_after_resize(qtbot: QtBot):
+    panel = make_cover_panel(qtbot, FakeCoverStore({}))
+    select_rows(panel, 0)
+    show_wide_side_panel(panel, 1200)
+    qtbot.waitUntil(lambda: panel.cover_view.width() > COVER_SIZE)
+    assert panel.cover_view.text() == "No cover"

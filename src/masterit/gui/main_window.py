@@ -43,7 +43,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
         self.settings_action = self._make_settings_action()
         self.tabs.setCornerWidget(self._make_settings_button(), Qt.Corner.TopRightCorner)
-        self._restore_geometry()
+        self._restore_window_state()
 
     def _make_settings_action(self) -> QAction:
         icon = QIcon.fromTheme("configure", QIcon.fromTheme("preferences-system"))
@@ -71,8 +71,14 @@ class MainWindow(QMainWindow):
         if self._must_defer_close():
             self._close_when_idle(event)
             return
+        self._save_library_layout()
         self._store.save_window_geometry(self.saveGeometry())
         super().closeEvent(event)
+
+    def _save_library_layout(self) -> None:
+        layout = self.library_panel.get_layout_state()
+        if layout is not None:
+            self._store.save_library_layout(layout)
 
     def _must_defer_close(self) -> bool:
         # A second close may abandon a download, never a move or tag write (partial file risk).
@@ -99,10 +105,13 @@ class MainWindow(QMainWindow):
         if not (self.download_panel.is_running or self.library_panel.is_busy):
             self.close()
 
-    def _restore_geometry(self) -> None:
+    def _restore_window_state(self) -> None:
         geometry = self._store.load_window_geometry()
         if geometry is not None:
             self.restoreGeometry(geometry)
+        layout = self._store.load_library_layout()
+        if layout is not None:
+            self.library_panel.restore_layout_state(layout)
 
 
 def get_default_music_folder() -> Path:
