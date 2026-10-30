@@ -31,7 +31,8 @@ def test_file_goes_to_album_folder_named_artist_dash_title():
     ("text", "safe"),
     [
         ("AC/DC", "AC-DC"),
-        ("What?", "What-"),
+        ("What?", "What_"),
+        ("Why? Not: me", "Why_ Not- me"),
         ('a\\b:c*d"e<f>g|h', "a-b-c-d-e-f-g-h"),
         ("  .38 Special ", "38 Special"),
         (". x", "x"),

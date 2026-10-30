@@ -1,8 +1,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QItemSelection, QItemSelectionModel, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -26,7 +25,7 @@ from masterit.download.skip_list import SkipList
 from masterit.download.url_input import parse_urls
 from masterit.gui.download_job import Downloader, DownloadJob
 from masterit.gui.download_rows import DownloadSummary
-from masterit.gui.download_table_model import DownloadTableModel
+from masterit.gui.download_table_model import CHECK_COLUMN, STATUS_COLUMN, DownloadTableModel
 from masterit.gui.settings_store import SettingsStore
 
 MISSING_FFMPEG_MESSAGE = "ffmpeg was not found: install it to download audio."
@@ -69,7 +68,6 @@ class DownloadPanel(QWidget):
         self._ffmpeg_available = ffmpeg_available
         self._job: DownloadJob | None = None
         self._cancel_token = CancelToken()
-        self._skip_list = SkipList()
         self._crash_message = ""
         self._build_widgets()
         self._build_layout()
@@ -91,10 +89,6 @@ class DownloadPanel(QWidget):
         downloader = self._make_downloader(settings)
         self._start_job(DownloadJob(downloader, urls, CancelToken(), SkipList()))
 
-    def toggle_skip_selected(self) -> None:
-        self.table_model.toggle_skip(self._get_selected_rows(), self._skip_list)
-        self._update_skip_availability()
-
     def cancel_download(self) -> None:
         self._cancel_token.cancel()
         self.cancel_button.setEnabled(False)
@@ -111,7 +105,7 @@ class DownloadPanel(QWidget):
     def _start_job(self, job: DownloadJob) -> None:
         self._job = job
         self._cancel_token = job.cancel_token
-        self._skip_list = job.skip_list
+        self.table_model.set_skip_list(job.skip_list)
         self._crash_message = ""
         job.signals.event_received.connect(self.table_model.apply_event)
         job.signals.event_received.connect(self._announce_downloaded_file)
@@ -130,6 +124,7 @@ class DownloadPanel(QWidget):
 
     def _finish_download(self) -> None:
         self._job = None
+        self.table_model.set_skip_list(None)
         if self._cancel_token.is_cancelled:
             self.table_model.mark_unfinished_cancelled()
         else:
@@ -150,15 +145,21 @@ class DownloadPanel(QWidget):
         for widget in (self.url_input, self.output_dir_input, self.browse_button, self.codec_input):
             widget.setEnabled(not running)
         self._update_quality_availability()
-        self._update_skip_availability()
 
-    def _get_selected_rows(self) -> list[int]:
-        return [index.row() for index in self.table_view.selectionModel().selectedRows()]
+    def _apply_check_to_selection(self, row: int, checked: bool) -> None:
+        selected_rows = [index.row() for index in self.table_view.selectionModel().selectedRows()]
+        if row not in selected_rows:
+            return
+        self.table_model.set_rows_checked(selected_rows, checked)
+        # A mouse release on a selected row collapses the selection after this runs.
+        QTimer.singleShot(0, lambda: self._select_rows(selected_rows))
 
-    def _update_skip_availability(self) -> None:
-        can_skip = self.is_running and self.table_model.can_toggle_skip(self._get_selected_rows())
-        self.skip_button.setEnabled(can_skip)
-        self.skip_action.setEnabled(can_skip)
+    def _select_rows(self, rows: list[int]) -> None:
+        selection = QItemSelection()
+        for row in rows:
+            selection.select(self.table_model.index(row, 0), self.table_model.index(row, 0))
+        flags = QItemSelectionModel.SelectionFlag
+        self.table_view.selectionModel().select(selection, flags.ClearAndSelect | flags.Rows)
 
     def _show_ffmpeg_warning(self) -> None:
         if not self._ffmpeg_available:
@@ -200,20 +201,16 @@ class DownloadPanel(QWidget):
         self.quality_input.addItems(AUDIO_QUALITIES)
         self.download_button = QPushButton("Download")
         self.cancel_button = QPushButton("Cancel")
-        self.skip_button = QPushButton("Skip / Unskip")
-        self.skip_button.setToolTip("Skip the selected pending rows, or download them again")
-        self.skip_action = QAction("Skip / Unskip", self)
         self.status_label = QLabel()
         self.table_model = DownloadTableModel()
         self.table_view = QTableView()
         self.table_view.setModel(self.table_model)
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.ActionsContextMenu)
-        self.table_view.addAction(self.skip_action)
         header = self.table_view.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        for column in (CHECK_COLUMN, STATUS_COLUMN):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
 
     def _build_layout(self) -> None:
         output_row = QHBoxLayout()
@@ -227,7 +224,6 @@ class DownloadPanel(QWidget):
         buttons = QHBoxLayout()
         buttons.addWidget(self.download_button)
         buttons.addWidget(self.cancel_button)
-        buttons.addWidget(self.skip_button)
         buttons.addWidget(self.status_label, stretch=1)
         layout = QVBoxLayout(self)
         layout.addLayout(form)
@@ -239,7 +235,4 @@ class DownloadPanel(QWidget):
         self.browse_button.clicked.connect(self._browse_output_dir)
         self.download_button.clicked.connect(self.start_download)
         self.cancel_button.clicked.connect(self.cancel_download)
-        self.skip_button.clicked.connect(self.toggle_skip_selected)
-        self.skip_action.triggered.connect(self.toggle_skip_selected)
-        self.table_view.selectionModel().selectionChanged.connect(self._update_skip_availability)
-        self.table_model.dataChanged.connect(self._update_skip_availability)
+        self.table_model.check_changed.connect(self._apply_check_to_selection)

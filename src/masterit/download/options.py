@@ -17,7 +17,12 @@ SPLIT_MARKER = "\x1f"
 ARTIST_TITLE_INPUT = f"%(artist|)s{SPLIT_MARKER}%(title)s"
 ARTIST_TITLE_PATTERN = "^" + SPLIT_MARKER + r"(?P<artist>.+?)\s+[-\u2013\u2014]\s+(?P<title>.+)$"
 CHANNEL_SUFFIX_PATTERN = r"(?i)\s*-\s*Topic$|VEVO$"
-FILE_NAME_TEMPLATE = "%(artist&{} - |)s%(title)s.%(ext)s"
+# Separators only go when whitespace sets them apart, so "Song-" keeps its dash.
+EDGE_SEPARATORS = r"[-\u2013\u2014|\uff5c]+"
+EDGE_SEPARATOR_PATTERN = rf"^\s*(?:{EDGE_SEPARATORS}\s+)+|(?:\s+{EDGE_SEPARATORS})+\s*$"
+# Name parts are copied so "?" becomes "_" in paths while the tags keep it.
+FILE_NAME_FIELDS = {"artist": "file_artist", "title": "file_title"}
+FILE_NAME_TEMPLATE = "%(file_artist&{} - |)s%(file_title,id)s.%(ext)s"
 
 
 class YdlCallbacks(Protocol):
@@ -56,11 +61,28 @@ def make_metadata_parser() -> dict[str, Any]:
         "actions": [
             *((replace, "title", pattern, "") for pattern in TITLE_NOISE_PATTERNS),
             (replace, "title", r"\s+", " "),
-            (replace, "title", r"^\s+|\s+$", ""),
+            *make_trim_actions("title"),
             (MetadataParserPP.Actions.INTERPRET, ARTIST_TITLE_INPUT, ARTIST_TITLE_PATTERN),
+            *make_trim_actions("artist"),
+            *make_trim_actions("title"),
             (replace, "uploader", CHANNEL_SUFFIX_PATTERN, ""),
+            *make_file_name_actions(),
         ],
     }
+
+
+def make_trim_actions(field: str) -> list[tuple[Any, ...]]:
+    replace = MetadataParserPP.Actions.REPLACE
+    return [(replace, field, EDGE_SEPARATOR_PATTERN, ""), (replace, field, r"^\s+|\s+$", "")]
+
+
+def make_file_name_actions() -> list[tuple[Any, ...]]:
+    interpret, replace = MetadataParserPP.Actions.INTERPRET, MetadataParserPP.Actions.REPLACE
+    copies = [
+        (interpret, f"%({field}|)s", f"(?s)(?P<{copy}>.+)")
+        for field, copy in FILE_NAME_FIELDS.items()
+    ]
+    return [*copies, *((replace, copy, r"\?", "_") for copy in FILE_NAME_FIELDS.values())]
 
 
 def make_audio_postprocessors(settings: DownloadSettings) -> list[dict[str, Any]]:
@@ -79,5 +101,6 @@ def make_audio_postprocessors(settings: DownloadSettings) -> list[dict[str, Any]
 def make_output_templates(output_dir: Path) -> dict[str, str]:
     return {
         "default": str(output_dir / FILE_NAME_TEMPLATE),
-        "playlist": str(output_dir / "%(playlist_title)s" / FILE_NAME_TEMPLATE),
+        # The playlist's own thumbnail would be a stray image beside the tracks.
+        "pl_thumbnail": "",
     }

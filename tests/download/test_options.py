@@ -86,6 +86,10 @@ def test_logged_messages_have_no_color_codes():
     [
         ({"title": "Artist - Song", "artist": None}, "/music/yt/Artist - Song.mp3"),
         ({"title": "Song"}, "/music/yt/Song.mp3"),
+        ({"title": "Who? - Why?", "artist": None}, "/music/yt/Who_ - Why_.mp3"),
+        ({"title": "C?", "artist": "D?"}, "/music/yt/D_ - C_.mp3"),
+        ({"title": "(Official Video)", "id": "abc"}, "/music/yt/abc.mp3"),
+        ({"title": "Song", "artist": " "}, "/music/yt/Song.mp3"),
     ],
 )
 def test_file_name_starts_with_artist_when_known(info: dict[str, Any], expected: str):
@@ -95,8 +99,25 @@ def test_file_name_starts_with_artist_when_known(info: dict[str, Any], expected:
         assert ydl.evaluate_outtmpl(template, cast(Any, parsed)) == expected
 
 
-def test_playlist_items_go_to_playlist_folder():
-    assert make_options()["outtmpl"]["playlist"].startswith("/music/yt/%(playlist_title)s/")
+def test_playlist_items_go_flat_into_output_folder():
+    parsed = parse_metadata({"title": "Song?", "playlist_title": "Best", "ext": "mp3"})
+    with YoutubeDL(cast(Any, make_options())) as ydl:
+        assert ydl.prepare_filename(cast(Any, parsed)) == "/music/yt/Song_.mp3"
+
+
+def test_playlist_thumbnail_is_not_written():
+    playlist = {"title": "Best", "_type": "playlist", "ext": None}
+    with YoutubeDL(cast(Any, make_options())) as ydl:
+        assert ydl.prepare_filename(cast(Any, playlist), "pl_thumbnail") == ""
+
+
+def test_file_name_keeps_multiline_artist_whole():
+    assert parse_metadata({"title": "Song", "artist": "Q\nR"})["file_artist"] == "Q\nR"
+
+
+def test_question_marks_stay_in_tags():
+    parsed = parse_metadata({"title": "Who? - Why?"})
+    assert (parsed["artist"], parsed["title"]) == ("Who?", "Why?")
 
 
 @pytest.mark.parametrize(
@@ -106,6 +127,15 @@ def test_playlist_items_go_to_playlist_folder():
         ("Song [Lyric Video]", "Song"),
         ("Song (Clip Officiel)  extra", "Song extra"),
         ("Song (OFFICIAL MUSIC VIDEO)", "Song"),
+        ("Song - (Official Video)", "Song"),
+        ("(Official Video) \u2014 Song", "Song"),
+        ("Song | [Lyric Video]", "Song"),
+        ("Song \uff5c (Official Video)", "Song"),
+        ("Song - - (Official Video)", "Song"),
+        ("Song - (Official Video) -", "Song"),
+        ("- - Song", "Song"),
+        ("Song-", "Song-"),
+        ("-", "-"),
     ],
 )
 def test_title_noise_is_removed(title: str, expected: str):
@@ -116,6 +146,23 @@ def test_title_noise_is_removed(title: str, expected: str):
 def test_artist_is_split_from_title(separator: str):
     parsed = parse_metadata({"title": f"Daft Punk {separator} One More Time (Official Video)"})
     assert (parsed["artist"], parsed["title"]) == ("Daft Punk", "One More Time")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Artist - Song - (Official Video)",
+        "Artist - (Official Video) - Song",
+        "Artist | (Official Video) - Song",
+    ],
+)
+def test_separator_left_by_noise_does_not_stay_in_split_parts(title: str):
+    parsed = parse_metadata({"title": title})
+    assert (parsed["artist"], parsed["title"]) == ("Artist", "Song")
+
+
+def test_known_artist_is_trimmed_of_edge_separators():
+    assert parse_metadata({"title": "Song", "artist": " - X - "})["artist"] == "X"
 
 
 def test_title_is_not_split_when_artist_is_known():

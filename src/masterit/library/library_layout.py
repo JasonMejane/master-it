@@ -21,7 +21,7 @@ type TagReader = Callable[[Path], Tags]
 
 def make_safe_name(text: str) -> str:
     # Windows refuses these characters, reserved device names, and trailing dots or spaces.
-    replaced = FORBIDDEN_CHARACTERS.sub("-", text.strip())
+    replaced = FORBIDDEN_CHARACTERS.sub("-", text.strip().replace("?", "_"))
     return avoid_reserved_name(trim_name(replaced))
 
 

@@ -2,7 +2,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QFileDialog, QStyle, QStyleOptionViewItem
 from pytestqt.qtbot import QtBot
 
 from masterit.download.events import ItemProgress
@@ -43,7 +45,7 @@ def make_folder_chooser(folder: str) -> Callable[..., str]:
 
 
 def get_status(panel: DownloadPanel, row: int) -> object:
-    return panel.table_model.data(panel.table_model.index(row, 1))
+    return panel.table_model.data(panel.table_model.index(row, 2))
 
 
 def start_download(qtbot: QtBot, panel: DownloadPanel, text: str = "https://a") -> None:
@@ -143,7 +145,7 @@ def test_cancel_marks_unfinished_rows_cancelled(qtbot: QtBot, tmp_path: Path):
     panel.table_model.apply_event(ItemProgress("https://a", SONG, 10.0))
     with qtbot.waitSignal(panel.download_finished, timeout=1000):
         panel.cancel_button.click()
-    assert panel.table_model.data(panel.table_model.index(0, 1)) == "Cancelled"
+    assert panel.table_model.data(panel.table_model.index(0, 2)) == "Cancelled"
 
 
 def test_pasted_links_are_pending_until_they_start(qtbot: QtBot, tmp_path: Path):
@@ -240,50 +242,82 @@ def start_playlist_download(qtbot: QtBot, tmp_path: Path) -> DownloadPanel:
     return panel
 
 
-def select_row(panel: DownloadPanel, row: int) -> None:
-    panel.table_view.clearSelection()
-    panel.table_view.selectRow(row)
+def set_check(panel: DownloadPanel, row: int, state: Qt.CheckState) -> bool:
+    model = panel.table_model
+    return model.setData(model.index(row, 0), state.value, Qt.ItemDataRole.CheckStateRole)
 
 
-def test_skip_is_unavailable_without_running_download(qtbot: QtBot, tmp_path: Path):
+def test_rows_are_not_checkable_without_running_download(qtbot: QtBot, tmp_path: Path):
     panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
-    assert not panel.skip_button.isEnabled()
-    assert not panel.skip_action.isEnabled()
+    panel.table_model.add_links(["https://a"])
+    assert not set_check(panel, 0, Qt.CheckState.Unchecked)
 
 
-def test_skip_follows_selected_rows(qtbot: QtBot, tmp_path: Path):
+def test_unchecked_row_is_not_downloaded_and_counted(qtbot: QtBot, tmp_path: Path):
     panel = start_playlist_download(qtbot, tmp_path)
-    assert not panel.skip_button.isEnabled()
-    select_row(panel, 0)
-    assert panel.skip_button.isEnabled()
-    assert panel.skip_action.isEnabled()
     with qtbot.waitSignal(panel.download_finished, timeout=5000):
-        panel.cancel_button.click()
-
-
-def test_skipped_row_is_not_downloaded_and_counted(qtbot: QtBot, tmp_path: Path):
-    panel = start_playlist_download(qtbot, tmp_path)
-    select_row(panel, 0)
-    with qtbot.waitSignal(panel.download_finished, timeout=5000):
-        panel.skip_button.click()
+        set_check(panel, 0, Qt.CheckState.Unchecked)
     assert [get_status(panel, row) for row in range(2)] == ["Skipped", "Done"]
     assert panel.status_label.text() == (
         "Finished: 1 completed, 0 with warnings, 0 failed, 1 skipped."
     )
-    assert not panel.skip_button.isEnabled()
+    assert not set_check(panel, 1, Qt.CheckState.Unchecked)
 
 
-def test_skip_action_toggles_back_to_pending(qtbot: QtBot, tmp_path: Path):
+def test_checking_again_puts_row_back_to_pending(qtbot: QtBot, tmp_path: Path):
     panel = start_playlist_download(qtbot, tmp_path)
-    select_row(panel, 1)
-    panel.skip_action.trigger()
+    set_check(panel, 1, Qt.CheckState.Unchecked)
     assert get_status(panel, 1) == "Will skip"
-    panel.skip_action.trigger()
+    set_check(panel, 1, Qt.CheckState.Checked)
     assert get_status(panel, 1) == "Pending"
     with qtbot.waitSignal(panel.download_finished, timeout=5000):
         panel.cancel_button.click()
 
 
-def test_skip_action_is_in_row_context_menu(qtbot: QtBot, tmp_path: Path):
-    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
-    assert panel.skip_action in panel.table_view.actions()
+def select_rows(panel: DownloadPanel, rows: list[int]) -> None:
+    selection = panel.table_view.selectionModel()
+    for row in rows:
+        index = panel.table_model.index(row, 0)
+        selection.select(index, selection.SelectionFlag.Select | selection.SelectionFlag.Rows)
+
+
+def test_checking_a_selected_row_applies_to_whole_selection(qtbot: QtBot, tmp_path: Path):
+    panel = start_playlist_download(qtbot, tmp_path)
+    select_rows(panel, [0, 1])
+    set_check(panel, 1, Qt.CheckState.Unchecked)
+    assert [get_status(panel, row) for row in range(2)] == ["Will skip", "Will skip"]
+    with qtbot.waitSignal(panel.download_finished, timeout=5000):
+        panel.cancel_button.click()
+
+
+def test_checking_an_unselected_row_leaves_selection_alone(qtbot: QtBot, tmp_path: Path):
+    panel = start_playlist_download(qtbot, tmp_path)
+    select_rows(panel, [0])
+    set_check(panel, 1, Qt.CheckState.Unchecked)
+    assert [get_status(panel, row) for row in range(2)] == ["Pending", "Will skip"]
+    with qtbot.waitSignal(panel.download_finished, timeout=5000):
+        panel.cancel_button.click()
+
+
+def get_checkbox_center(panel: DownloadPanel, row: int) -> QPoint:
+    option = QStyleOptionViewItem()
+    option.rect = panel.table_view.visualRect(panel.table_model.index(row, 0))
+    option.features |= QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
+    indicator = QStyle.SubElement.SE_ItemViewItemCheckIndicator
+    return panel.table_view.style().subElementRect(indicator, option, panel.table_view).center()
+
+
+def get_selected_rows(panel: DownloadPanel) -> list[int]:
+    return sorted(index.row() for index in panel.table_view.selectionModel().selectedRows())
+
+
+def test_clicking_a_selected_checkbox_keeps_the_selection(qtbot: QtBot, tmp_path: Path):
+    panel = start_playlist_download(qtbot, tmp_path)
+    panel.show()
+    qtbot.waitExposed(panel)
+    select_rows(panel, [0, 1])
+    viewport = panel.table_view.viewport()
+    with qtbot.waitSignal(panel.download_finished, timeout=5000):
+        QTest.mouseClick(viewport, Qt.MouseButton.LeftButton, pos=get_checkbox_center(panel, 1))
+        assert [get_status(panel, row) for row in range(2)] == ["Will skip", "Will skip"]
+    assert get_selected_rows(panel) == [0, 1]

@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Sequence
 from typing import Any, override
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt, Signal
 from PySide6.QtGui import QColor
 
 from masterit.download.events import DownloadEvent
@@ -16,7 +16,10 @@ from masterit.gui.download_rows import (
 
 type Index = QModelIndex | QPersistentModelIndex
 
-HEADERS = ("Title", "Status", "Details")
+HEADERS = ("", "Title", "Status", "Details")
+CHECK_COLUMN = 0
+STATUS_COLUMN = 2
+CHECK_ROLE = Qt.ItemDataRole.CheckStateRole
 ROOT = QModelIndex()
 STATUS_COLORS = {
     RowStatus.FAILED: QColor(Qt.GlobalColor.red),
@@ -41,13 +44,26 @@ def get_status_label(row: DownloadRow) -> str:
 
 
 def get_cell_text(row: DownloadRow, column: int) -> str:
-    return (row.title, get_status_label(row), row.details)[column]
+    return ("", row.title, get_status_label(row), row.details)[column]
+
+
+def is_checked(row: DownloadRow) -> bool:
+    return row.status != RowStatus.SKIP_REQUESTED
+
+
+def get_check_state(row: DownloadRow) -> Qt.CheckState:
+    return Qt.CheckState.Checked if is_checked(row) else Qt.CheckState.Unchecked
 
 
 class DownloadTableModel(QAbstractTableModel):
+    # Emitted for user check changes only, so a view can spread them to its selection.
+    check_changed = Signal(int, bool)
+
     def __init__(self) -> None:
         super().__init__()
         self._rows = DownloadRows()
+        # Only set while a download runs: rows can be skipped then.
+        self._skip_list: SkipList | None = None
 
     def add_links(self, urls: Sequence[str]) -> None:
         if not urls:
@@ -73,13 +89,13 @@ class DownloadTableModel(QAbstractTableModel):
         self._rows.apply_at(event, placement)
         self.endInsertRows()
 
-    def can_toggle_skip(self, indexes: Iterable[int]) -> bool:
-        return any(self._rows.can_toggle_skip(index) for index in indexes)
-
-    def toggle_skip(self, indexes: Iterable[int], skip_list: SkipList) -> None:
-        for index in indexes:
-            self._rows.toggle_skip(index, skip_list)
+    def set_skip_list(self, skip_list: SkipList | None) -> None:
+        self._skip_list = skip_list
         self._emit_all_changed()
+
+    def set_rows_checked(self, rows: Iterable[int], checked: bool) -> None:
+        for row in rows:
+            self._set_checked(row, checked)
 
     def mark_unfinished_cancelled(self) -> None:
         self._rows.mark_unfinished_cancelled()
@@ -124,7 +140,41 @@ class DownloadTableModel(QAbstractTableModel):
         if not index.isValid():
             return None
         row = self._rows.get_row(index.row())
+        if role == CHECK_ROLE:
+            return get_check_state(row) if self._is_checkable(index) else None
         return self._get_role_data(row, index.column(), role)
+
+    @override
+    def flags(self, index: Index) -> Qt.ItemFlag:
+        if self._is_checkable(index):
+            return super().flags(index) | Qt.ItemFlag.ItemIsUserCheckable
+        return super().flags(index)
+
+    @override
+    def setData(self, index: Index, value: Any, role: int = Qt.ItemDataRole.EditRole) -> bool:
+        if role != CHECK_ROLE or not self._is_checkable(index):
+            return False
+        checked = Qt.CheckState(value) == Qt.CheckState.Checked
+        if self._set_checked(index.row(), checked):
+            self.check_changed.emit(index.row(), checked)
+        return True
+
+    def _set_checked(self, row: int, checked: bool) -> bool:
+        skip_list = self._find_toggle_skip_list(self.index(row, CHECK_COLUMN))
+        if skip_list is None or checked == is_checked(self._rows.get_row(row)):
+            return False
+        self._rows.toggle_skip(row, skip_list)
+        self.dataChanged.emit(self.index(row, 0), self.index(row, len(HEADERS) - 1))
+        return True
+
+    def _is_checkable(self, index: Index) -> bool:
+        return self._find_toggle_skip_list(index) is not None
+
+    def _find_toggle_skip_list(self, index: Index) -> SkipList | None:
+        is_check_cell = index.isValid() and index.column() == CHECK_COLUMN
+        if not (is_check_cell and self._rows.can_toggle_skip(index.row())):
+            return None
+        return self._skip_list
 
     def _get_role_data(self, row: DownloadRow, column: int, role: int) -> Any:
         if role == Qt.ItemDataRole.ForegroundRole:
