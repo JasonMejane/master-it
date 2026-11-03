@@ -206,21 +206,3 @@ def test_side_panel_takes_about_a_third_by_default(qtbot: QtBot):
     panel.show()
     table_width, side_width = panel.content_splitter.sizes()
     assert side_width / (table_width + side_width) == pytest.approx(0.3, abs=0.05)
-
-
-def test_layout_state_is_restored(qtbot: QtBot):
-    panel = make_panel(qtbot)
-    panel.resize(1500, 800)
-    panel.show()
-    panel.content_splitter.setSizes([700, 800])
-    restored = make_panel(qtbot)
-    restored.resize(1500, 800)
-    restored.show()
-    state = panel.get_layout_state()
-    assert state is not None
-    restored.restore_layout_state(state)
-    assert restored.content_splitter.sizes() == panel.content_splitter.sizes()
-
-
-def test_never_shown_panel_has_no_layout_state(qtbot: QtBot):
-    assert make_panel(qtbot).get_layout_state() is None

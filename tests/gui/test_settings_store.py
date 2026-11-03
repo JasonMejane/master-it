@@ -1,6 +1,7 @@
 from pathlib import Path
 from uuid import UUID
 
+import pytest
 from PySide6.QtCore import QByteArray, QSettings
 
 from masterit.download.settings import AudioCodec, DownloadSettings
@@ -102,19 +103,21 @@ def test_the_default_user_agent_is_not_frozen_by_saving(tmp_path: Path):
     assert make_store(tmp_path).load_tagger_keys().musicbrainz_user_agent == ""
 
 
-def test_library_layout_round_trips(tmp_path: Path):
-    make_store(tmp_path).save_library_layout(QByteArray(b"layout"))
-    assert make_store(tmp_path).load_library_layout() == QByteArray(b"layout")
+def test_layout_round_trips(tmp_path: Path):
+    make_store(tmp_path).save_layout("library", QByteArray(b"layout"))
+    assert make_store(tmp_path).load_layout("library") == QByteArray(b"layout")
 
 
-def test_missing_library_layout_is_none(tmp_path: Path):
-    assert make_store(tmp_path).load_library_layout() is None
+@pytest.mark.parametrize("name", ["library", "download"])
+def test_layouts_use_their_former_keys(tmp_path: Path, name: str):
+    raw = QSettings(str(tmp_path / "test.conf"), QSettings.Format.IniFormat)
+    raw.setValue(f"window/{name}_layout", QByteArray(b"old"))
+    raw.sync()
+    store = make_store(tmp_path)
+    assert store.load_layout(name) == QByteArray(b"old")
+    store.save_layout(name, QByteArray(b"new"))
+    assert raw.value(f"window/{name}_layout") == QByteArray(b"new")
 
 
-def test_download_layout_round_trips(tmp_path: Path):
-    make_store(tmp_path).save_download_layout(QByteArray(b"layout"))
-    assert make_store(tmp_path).load_download_layout() == QByteArray(b"layout")
-
-
-def test_missing_download_layout_is_none(tmp_path: Path):
-    assert make_store(tmp_path).load_download_layout() is None
+def test_missing_layout_is_none(tmp_path: Path):
+    assert make_store(tmp_path).load_layout("library") is None

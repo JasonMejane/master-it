@@ -105,6 +105,27 @@ def test_closing_saves_download_layout_and_reopening_restores_it(qtbot: QtBot, t
     assert reopened.download_panel.content_splitter.sizes()[0] == 400
 
 
+@pytest.mark.parametrize("panel_name", ["library", "download"])
+def test_layouts_saved_before_the_refactor_still_load(
+    qtbot: QtBot, tmp_path: Path, panel_name: str
+):
+    window = make_window(qtbot, tmp_path)
+    window.resize(900, 900)
+    window.show()
+    splitter = getattr(window, f"{panel_name}_panel").content_splitter
+    window.tabs.setCurrentWidget(getattr(window, f"{panel_name}_panel"))
+    splitter.setSizes([300, 500])
+    raw = QSettings(str(tmp_path / "t.conf"), QSettings.Format.IniFormat)
+    raw.setValue(f"window/{panel_name}_layout", splitter.saveState())
+    raw.sync()
+    reopened = make_window(qtbot, tmp_path)
+    reopened.resize(900, 900)
+    reopened.show()
+    reopened.tabs.setCurrentWidget(getattr(reopened, f"{panel_name}_panel"))
+    restored = getattr(reopened, f"{panel_name}_panel").content_splitter
+    assert restored.sizes() == splitter.sizes()
+
+
 def make_library(tmp_path: Path, tagger: Tagger | None = None) -> LibraryPanel:
     services = LibraryServices(
         get_download_folder=lambda: tmp_path,

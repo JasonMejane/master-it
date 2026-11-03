@@ -344,23 +344,6 @@ def test_links_box_grows_with_the_form_part(qtbot: QtBot, tmp_path: Path):
     qtbot.waitUntil(lambda: panel.url_input.height() > initial_height + 100)
 
 
-def test_download_layout_state_is_restored(qtbot: QtBot, tmp_path: Path):
-    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
-    restored = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
-    for shown in (panel, restored):
-        shown.resize(900, 900)
-        shown.show()
-    panel.content_splitter.setSizes([500, 400])
-    state = panel.get_layout_state()
-    assert state is not None
-    restored.restore_layout_state(state)
-    assert restored.content_splitter.sizes() == panel.content_splitter.sizes()
-
-
-def test_never_shown_download_panel_has_no_layout_state(qtbot: QtBot, tmp_path: Path):
-    assert PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel.get_layout_state() is None
-
-
 def test_links_box_opens_at_its_former_capped_height(qtbot: QtBot, tmp_path: Path):
     panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
     panel.resize(900, 900)

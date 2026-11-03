@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import override
 
 from PySide6.QtCore import (
-    QByteArray,
     QItemSelection,
     QItemSelectionModel,
     QSize,
@@ -116,15 +115,6 @@ class DownloadPanel(QWidget):
     @property
     def is_running(self) -> bool:
         return self._job is not None
-
-    def get_layout_state(self) -> QByteArray | None:
-        # A splitter never shown has zero sizes, which would restore as a broken layout.
-        if not any(self.content_splitter.sizes()):
-            return None
-        return self.content_splitter.saveState()
-
-    def restore_layout_state(self, state: QByteArray) -> None:
-        self.content_splitter.restoreState(state)
 
     def stop(self) -> None:
         self.cancel_download()

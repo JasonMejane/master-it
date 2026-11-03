@@ -5,7 +5,7 @@ from typing import override
 
 from PySide6.QtCore import QSettings, QStandardPaths, Qt, QThreadPool
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
-from PySide6.QtWidgets import QMainWindow, QTabWidget, QToolButton, QWidget
+from PySide6.QtWidgets import QMainWindow, QSplitter, QTabWidget, QToolButton, QWidget
 
 from masterit.download.downloader import YtDlpDownloader
 from masterit.gui.download_panel import DownloadPanel
@@ -13,6 +13,7 @@ from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.library_services import LibraryServices
 from masterit.gui.settings_dialog import edit_tagger_keys
 from masterit.gui.settings_store import SettingsStore
+from masterit.gui.splitter_state import get_splitter_state
 from masterit.tagging.native_setup import TaggerKeys, make_native_tagger
 from masterit.tagging.tagger import Tagger
 from masterit.tags.cover_store import MutagenCoverStore
@@ -76,12 +77,16 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def _save_panel_layouts(self) -> None:
-        library_layout = self.library_panel.get_layout_state()
-        if library_layout is not None:
-            self._store.save_library_layout(library_layout)
-        download_layout = self.download_panel.get_layout_state()
-        if download_layout is not None:
-            self._store.save_download_layout(download_layout)
+        for name, splitter in self._get_layout_splitters().items():
+            layout = get_splitter_state(splitter)
+            if layout is not None:
+                self._store.save_layout(name, layout)
+
+    def _get_layout_splitters(self) -> dict[str, QSplitter]:
+        return {
+            "library": self.library_panel.content_splitter,
+            "download": self.download_panel.content_splitter,
+        }
 
     def _must_defer_close(self) -> bool:
         # A second close may abandon a download, never a move or tag write (partial file risk).
@@ -115,12 +120,10 @@ class MainWindow(QMainWindow):
         self._restore_panel_layouts()
 
     def _restore_panel_layouts(self) -> None:
-        library_layout = self._store.load_library_layout()
-        if library_layout is not None:
-            self.library_panel.restore_layout_state(library_layout)
-        download_layout = self._store.load_download_layout()
-        if download_layout is not None:
-            self.download_panel.restore_layout_state(download_layout)
+        for name, splitter in self._get_layout_splitters().items():
+            layout = self._store.load_layout(name)
+            if layout is not None:
+                splitter.restoreState(layout)
 
 
 def get_default_music_folder() -> Path:
