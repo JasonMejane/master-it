@@ -4,7 +4,7 @@ from typing import Protocol
 
 # Removed text is first replaced by a marker so the tidy-up only touches its surroundings.
 REMOVED = "\x00"
-SEPARATOR_CHARS = r"\-\u2013\u2014\uff5c|_,"
+SEPARATOR_CHARS = r"\-\u2013\u2014\uff5c\u29f8\uff1a|_,"
 SEPARATORS = r"[\s" + SEPARATOR_CHARS + "]*"
 REPEATED_REMOVALS = re.compile(REMOVED + r"(?:\s*" + REMOVED + ")+")
 EMPTIED_BRACKETS = re.compile(r"[\(\[]\s*" + REMOVED + r"\s*[\)\]]")

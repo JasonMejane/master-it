@@ -68,3 +68,17 @@ def test_removal_matches_file_name_lookalikes_and_spaces(text: str, stem: str, e
 )
 def test_removal_ignores_spaces_around_the_text(text: str, stem: str, expected: str):
     assert RemoveText(text).make_name(stem) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "stem", "expected"),
+    [
+        ("Artist", "Artist \u29f8 Song", "Song"),
+        ("Live", "Song \uff1a Live", "Song"),
+        ("Live", "Song \u29f8 Live \uff1a 1979", "Song \uff1a 1979"),
+        ("Song", "AC\u29f8DC - Song", "AC\u29f8DC"),
+        ("Live", "Song - Live\uff1a1979", "Song\uff1a1979"),
+    ],
+)
+def test_removal_takes_lookalike_separators_along(text: str, stem: str, expected: str):
+    assert RemoveText(text).make_name(stem) == expected
