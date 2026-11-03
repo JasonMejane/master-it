@@ -57,8 +57,7 @@ class LibraryTableModel(QAbstractTableModel):
     def __init__(self, tag_cache: TagCache) -> None:
         super().__init__()
         self._tag_cache = tag_cache
-        self._tag_preview_paths: set[Path] = set()
-        self._tag_edits: Tags = {}
+        self._tag_edits_by_path: dict[Path, Tags] = {}
         # Kept across reloads: it reports this session's runs, keyed by the files' final paths.
         self._auto_tag_statuses: dict[Path, AutoTagCell] = {}
         self._files: list[Path] = []
@@ -73,8 +72,7 @@ class LibraryTableModel(QAbstractTableModel):
         self._folder_texts = {path: describe_folder(path, self._root) for path in files}
         self._preview = {}
         self._tag_cache.clear()
-        self._tag_preview_paths = set()
-        self._tag_edits = {}
+        self._tag_edits_by_path = {}
         self.endResetModel()
 
     def append_file(self, path: Path) -> None:
@@ -100,9 +98,8 @@ class LibraryTableModel(QAbstractTableModel):
     def get_tags(self, path: Path) -> Tags:
         return self._tag_cache.get(path)
 
-    def set_tag_preview(self, paths: Iterable[Path], edits: Tags) -> None:
-        self._tag_preview_paths = set(paths)
-        self._tag_edits = dict(edits)
+    def set_tag_preview(self, edits_by_path: Mapping[Path, Tags]) -> None:
+        self._tag_edits_by_path = dict(edits_by_path)
         self._emit_tags_changed()
 
     def refresh_tags(self, paths: Iterable[Path]) -> None:
@@ -178,11 +175,11 @@ class LibraryTableModel(QAbstractTableModel):
 
     def _get_tag_text(self, path: Path, field: TagField) -> str:
         if self._is_tag_pending(path, field):
-            return self._tag_edits[field]
+            return self._tag_edits_by_path[path][field]
         return self._tag_cache.get(path).get(field, "")
 
     def _is_tag_pending(self, path: Path, field: TagField) -> bool:
-        return path in self._tag_preview_paths and field in self._tag_edits
+        return field in self._tag_edits_by_path.get(path, {})
 
     def _get_tool_tip(self, path: Path, column: int) -> str | None:
         if column != AUTO_TAG_COLUMN:

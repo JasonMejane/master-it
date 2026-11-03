@@ -28,7 +28,8 @@ def run_job(job: TagJob) -> list[object]:
 
 def test_job_writes_edits_with_progress():
     store = FakeTagStore(failing={PATHS[1]})
-    emitted = run_job(TagJob(PATHS, {TagField.GENRE: "Rock"}, store))
+    edits = {PATHS[0]: {TagField.GENRE: "Rock"}, PATHS[1]: {TagField.GENRE: "Pop"}}
+    emitted = run_job(TagJob(edits, store))
     assert emitted == [
         (1, 2),
         (2, 2),
@@ -42,4 +43,4 @@ def test_job_reports_crash_then_finishes(monkeypatch: pytest.MonkeyPatch):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(tag_job, "write_tag_edits", crash)
-    assert run_job(TagJob(PATHS, {}, FakeTagStore())) == ["boom", []]
+    assert run_job(TagJob({PATHS[0]: {}}, FakeTagStore())) == ["boom", []]

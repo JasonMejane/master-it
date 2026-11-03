@@ -17,22 +17,44 @@ from masterit.gui.library_context import TagContext
 from masterit.gui.tag_job import TagJob
 from masterit.gui.tag_labels import TAG_LABELS
 from masterit.tags.fields import TagField, Tags
-from masterit.tags.tag_edits import TagOutcome, find_tag_problem, merge_tag_values
+from masterit.tags.name_tags import make_name_tag_edits
+from masterit.tags.tag_edits import (
+    TagOutcome,
+    drop_unchanged_tags,
+    find_tag_problem,
+    merge_file_edits,
+    merge_tag_values,
+)
 from masterit.tags.tag_store import TagStore
 
 MIXED_PLACEHOLDER = "<multiple values>"
 REMOVED_PLACEHOLDER = "<removed>"
+FROM_NAMES_PLACEHOLDER = "<from file names>"
+NAME_FIELDS = (TagField.ARTIST, TagField.TITLE)
 
 
-def get_placeholder(shared_value: str | None, edit: str | None) -> str:
+def get_placeholder(shared_value: str | None, edit: str | None, from_names: bool) -> str:
     if edit == "":
         return REMOVED_PLACEHOLDER
+    if from_names and edit is None:
+        return FROM_NAMES_PLACEHOLDER
     return MIXED_PLACEHOLDER if shared_value is None else ""
+
+
+def get_shown_name_values(parsed: dict[Path, Tags], selected: int) -> dict[TagField, str | None]:
+    # A value shown in a field reads as one for every selected file, so partial matches show none.
+    is_complete = len(parsed) == selected
+    return merge_tag_values(list(parsed.values()) if is_complete else [])
+
+
+def format_left_out(count: int) -> str:
+    return f'{count} left out: name is not "Artist - Title".' if count else ""
 
 
 class TagForm(QWidget):
     started = Signal()
     finished = Signal()
+    name_from_tags_requested = Signal()
 
     def __init__(self, context: TagContext, store: TagStore, thread_pool: QThreadPool) -> None:
         super().__init__()
@@ -41,6 +63,7 @@ class TagForm(QWidget):
         self._thread_pool = thread_pool
         self._shared: dict[TagField, str | None] = merge_tag_values([])
         self._edits: Tags = {}
+        self._name_edits: dict[Path, Tags] = {}
         self._cleared: set[TagField] = set()
         self._job: TagJob | None = None
         self._job_paths: list[Path] = []
@@ -57,18 +80,34 @@ class TagForm(QWidget):
         paths = self._context.get_selected_paths()
         self._shared = merge_tag_values([self._context.get_tags(path) for path in paths])
         self._edits = {}
+        self._name_edits = {}
         self._cleared = set()
         for field, line in self.field_inputs.items():
             line.setText(self._shared[field] or "")
             line.setEnabled(bool(paths))
             self._show_field_state(field)
+        for button in (self.tags_from_name_button, self.name_from_tags_button):
+            button.setEnabled(bool(paths))
         self._update_preview()
+
+    def fill_tags_from_names(self) -> None:
+        paths = self._context.get_selected_paths()
+        self._name_edits = make_name_tag_edits(paths)
+        shown_values = get_shown_name_values(self._name_edits, len(paths))
+        for field in filter(self._is_from_names, NAME_FIELDS):
+            self._edits.pop(field, None)
+            self._cleared.discard(field)
+            self.field_inputs[field].setText(shown_values[field] or "")
+            self._show_field_state(field)
+        self._update_preview()
+        self._context.show_status(format_left_out(len(paths) - len(self._name_edits)))
 
     def apply_tags(self) -> None:
         if not self._can_apply():
             return
-        self._job_paths = self._context.get_selected_paths()
-        job = TagJob(self._job_paths, dict(self._edits), self._store)
+        edits_by_path = self._get_edits_by_path()
+        self._job_paths = list(edits_by_path)
+        job = TagJob(edits_by_path, self._store)
         job.signals.progress.connect(self._show_progress)
         job.signals.crashed.connect(self._remember_crash)
         job.signals.finished.connect(self._finish)
@@ -79,13 +118,22 @@ class TagForm(QWidget):
         self._thread_pool.start(job)
 
     def _edit_field(self, field: TagField, text: str) -> None:
-        is_unchanged = text == (self._shared[field] or "") and field not in self._cleared
-        if is_unchanged:
+        if self._is_unchanged(field, text):
             self._edits.pop(field, None)
         else:
             self._edits[field] = text
         self._show_field_state(field)
         self._update_preview()
+
+    def _is_unchanged(self, field: TagField, text: str) -> bool:
+        if field in self._cleared:
+            return False
+        # Over file-name values, an emptied field gives them back instead of removing the tag.
+        original = "" if self._is_from_names(field) else (self._shared[field] or "")
+        return text == original
+
+    def _is_from_names(self, field: TagField) -> bool:
+        return any(field in edits for edits in self._name_edits.values())
 
     def _clear_field(self, field: TagField) -> None:
         self.field_inputs[field].clear()
@@ -96,18 +144,24 @@ class TagForm(QWidget):
 
     def _show_field_state(self, field: TagField) -> None:
         shared_value = self._shared[field]
-        placeholder = get_placeholder(shared_value, self._edits.get(field))
+        from_names = self._is_from_names(field)
+        placeholder = get_placeholder(shared_value, self._edits.get(field), from_names)
         self.field_inputs[field].setPlaceholderText(placeholder)
-        self.clear_actions[field].setVisible(shared_value != "")
+        self.clear_actions[field].setVisible(shared_value != "" or from_names)
 
     def _update_preview(self) -> None:
-        self._context.show_tag_preview(self._context.get_selected_paths(), self._edits)
+        self._context.show_tag_preview(self._get_edits_by_path())
         self.apply_button.setEnabled(self._can_apply())
-        self.reset_button.setEnabled(bool(self._edits))
+        self.reset_button.setEnabled(bool(self._edits or self._name_edits))
         self.problem_label.setText(find_tag_problem(self._edits) or "")
 
+    def _get_edits_by_path(self) -> dict[Path, Tags]:
+        paths = self._context.get_selected_paths()
+        merged = merge_file_edits(paths, self._edits, self._name_edits)
+        return drop_unchanged_tags(merged, self._context.get_tags)
+
     def _can_apply(self) -> bool:
-        has_work = bool(self._edits) and bool(self._context.get_selected_paths())
+        has_work = bool(self._get_edits_by_path())
         is_valid = find_tag_problem(self._edits) is None
         return has_work and is_valid and not self._context.is_busy
 
@@ -134,6 +188,10 @@ class TagForm(QWidget):
             self.clear_actions[field] = action
         self.apply_button = QPushButton("Apply tags")
         self.reset_button = QPushButton("Reset")
+        self.tags_from_name_button = QPushButton("Tags from name")
+        self.tags_from_name_button.setToolTip('Set Artist and Title from "Artist - Title" names')
+        self.name_from_tags_button = QPushButton("Name from tags")
+        self.name_from_tags_button.setToolTip('Rename to "Artist - Title" in the rename bar')
         self.problem_label = QLabel()
         self.problem_label.setWordWrap(True)
 
@@ -141,6 +199,10 @@ class TagForm(QWidget):
         form = QFormLayout()
         for field, line in self.field_inputs.items():
             form.addRow(TAG_LABELS[field], line)
+        name_buttons = QHBoxLayout()
+        name_buttons.addWidget(self.tags_from_name_button)
+        name_buttons.addWidget(self.name_from_tags_button)
+        form.addRow(name_buttons)
         buttons = QHBoxLayout()
         buttons.addWidget(self.reset_button)
         buttons.addWidget(self.apply_button)
@@ -155,3 +217,5 @@ class TagForm(QWidget):
             self.clear_actions[field].triggered.connect(partial(self._clear_field, field))
         self.apply_button.clicked.connect(self.apply_tags)
         self.reset_button.clicked.connect(self.load_selection)
+        self.tags_from_name_button.clicked.connect(self.fill_tags_from_names)
+        self.name_from_tags_button.clicked.connect(self.name_from_tags_requested)

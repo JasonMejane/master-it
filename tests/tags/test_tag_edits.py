@@ -5,7 +5,9 @@ import pytest
 from masterit.tags.fields import TagField
 from masterit.tags.tag_edits import (
     TagOutcome,
+    drop_unchanged_tags,
     find_tag_problem,
+    merge_file_edits,
     merge_tag_values,
     write_tag_edits,
 )
@@ -68,3 +70,29 @@ def test_write_reports_failure():
     outcome = write_tag_edits(Path("/a.mp3"), {TagField.GENRE: "Rock"}, store)
     assert outcome == TagOutcome(Path("/a.mp3"), "read-only")
     assert not outcome.succeeded
+
+
+def test_shared_edits_go_to_every_file_over_file_edits():
+    first, second = Path("/a.mp3"), Path("/b.mp3")
+    file_edits = {first: {TagField.ARTIST: "Queen", TagField.TITLE: "Jazz"}}
+    merged = merge_file_edits([first, second], {TagField.ARTIST: "Freddie"}, file_edits)
+    assert merged == {
+        first: {TagField.ARTIST: "Freddie", TagField.TITLE: "Jazz"},
+        second: {TagField.ARTIST: "Freddie"},
+    }
+
+
+def test_files_without_edits_are_left_out():
+    first = Path("/a.mp3")
+    file_edits = {first: {TagField.TITLE: "Jazz"}}
+    assert merge_file_edits([first, Path("/b.mp3")], {}, file_edits) == file_edits
+
+
+def test_unchanged_values_are_dropped():
+    first, second = Path("/a.mp3"), Path("/b.mp3")
+    current = {first: {TagField.ARTIST: "Queen"}, second: {TagField.TITLE: "Jazz"}}
+    edits = {
+        first: {TagField.ARTIST: "Queen", TagField.TITLE: "Jazz"},
+        second: {TagField.TITLE: "Jazz"},
+    }
+    assert drop_unchanged_tags(edits, current.__getitem__) == {first: {TagField.TITLE: "Jazz"}}

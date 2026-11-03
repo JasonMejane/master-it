@@ -171,7 +171,7 @@ def test_tag_columns_show_file_tags():
 def test_tag_preview_shows_edits_highlighted_on_given_files_only(qtbot: QtBot):
     model = make_model(store=FakeTagStore(TAGGED_STORE_TAGS))
     with qtbot.waitSignal(model.dataChanged):
-        model.set_tag_preview([SONG], {TagField.ARTIST: "New", TagField.TRACK: ""})
+        model.set_tag_preview({SONG: {TagField.ARTIST: "New", TagField.TRACK: ""}})
     assert get_tag_texts(model, 0) == ["Song", "New", "", "", "", "", ""]
     assert get_tag_texts(model, 1) == [""] * 7
     role = Qt.ItemDataRole.ForegroundRole
@@ -180,9 +180,15 @@ def test_tag_preview_shows_edits_highlighted_on_given_files_only(qtbot: QtBot):
     assert model.data(model.index(1, 4), role) is None
 
 
+def test_tag_preview_shows_each_file_its_own_edits():
+    model = make_model(store=FakeTagStore(TAGGED_STORE_TAGS))
+    model.set_tag_preview({SONG: {TagField.ARTIST: "A"}, OTHER: {TagField.ARTIST: "B"}})
+    assert [get_tag_texts(model, row)[1] for row in (0, 1)] == ["A", "B"]
+
+
 def test_tag_preview_is_cleared_by_new_files():
     model = make_model()
-    model.set_tag_preview([SONG], {TagField.ARTIST: "New"})
+    model.set_tag_preview({SONG: {TagField.ARTIST: "New"}})
     model.set_files([SONG], ROOT)
     assert get_tag_texts(model, 0)[1] == ""
 

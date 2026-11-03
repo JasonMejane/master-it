@@ -311,3 +311,180 @@ def test_finished_download_keeps_pending_edits(qtbot: QtBot):
     panel.add_downloaded_file(SONG_B)
     assert get_input_text(panel, TagField.GENRE) == "Rock"
     assert get_cell(panel, 1, TITLE_COLUMN) == "New"
+
+
+QUEEN = Path("/music/Queen - Jazz.mp3")
+FREDDIE = Path("/music/Freddie - Mustapha.mp3")
+UNNAMED = Path("/music/untitled.mp3")
+
+
+def make_named_panel(qtbot: QtBot, store: FakeTagStore | None = None) -> LibraryPanel:
+    panel = make_panel(qtbot, tag_store=store or FakeTagStore())
+    for path in (QUEEN, FREDDIE, UNNAMED):
+        panel.add_downloaded_file(path)
+    return panel
+
+
+def get_artist_and_title(panel: LibraryPanel, row: int) -> tuple[object, object]:
+    return get_cell(panel, row, ARTIST_COLUMN), get_cell(panel, row, TITLE_COLUMN)
+
+
+def test_tags_from_name_previews_each_file_own_values(qtbot: QtBot):
+    panel = make_named_panel(qtbot)
+    select_rows(panel, 0, 1)
+    panel.tag_form.tags_from_name_button.click()
+    assert get_artist_and_title(panel, 0) == ("Queen", "Jazz")
+    assert get_artist_and_title(panel, 1) == ("Freddie", "Mustapha")
+    artist_input = panel.tag_form.field_inputs[TagField.ARTIST]
+    assert artist_input.text() == ""
+    assert artist_input.placeholderText() == "<from file names>"
+    assert panel.tag_form.apply_button.isEnabled()
+    assert panel.tag_form.reset_button.isEnabled()
+
+
+def test_tags_from_name_are_written_per_file(qtbot: QtBot):
+    store = FakeTagStore({QUEEN: {TagField.GENRE: "Rock"}})
+    panel = make_named_panel(qtbot, store)
+    select_rows(panel, 0, 1)
+    panel.tag_form.tags_from_name_button.click()
+    apply_tags(qtbot, panel)
+    assert store.tags[QUEEN] == {
+        TagField.GENRE: "Rock",
+        TagField.ARTIST: "Queen",
+        TagField.TITLE: "Jazz",
+    }
+    assert store.tags[FREDDIE] == {TagField.ARTIST: "Freddie", TagField.TITLE: "Mustapha"}
+    assert panel.status_label.text() == "2 tagged, 0 failed."
+
+
+def test_tags_from_name_of_one_file_fill_the_fields(qtbot: QtBot):
+    panel = make_named_panel(qtbot)
+    select_rows(panel, 0)
+    panel.tag_form.tags_from_name_button.click()
+    assert get_input_text(panel, TagField.ARTIST) == "Queen"
+    assert get_input_text(panel, TagField.TITLE) == "Jazz"
+
+
+def test_tags_from_name_leave_out_files_without_artist_and_title(qtbot: QtBot):
+    store = FakeTagStore()
+    panel = make_named_panel(qtbot, store)
+    select_rows(panel, 0, 2)
+    panel.tag_form.tags_from_name_button.click()
+    assert panel.status_label.text() == '1 left out: name is not "Artist - Title".'
+    assert get_input_text(panel, TagField.ARTIST) == ""
+    assert get_artist_and_title(panel, 2) == ("", "")
+    apply_tags(qtbot, panel)
+    assert UNNAMED not in store.tags
+    assert panel.status_label.text() == "1 tagged, 0 failed."
+
+
+def test_tags_from_name_without_any_match_is_not_an_edit(qtbot: QtBot):
+    panel = make_named_panel(qtbot)
+    select_rows(panel, 2)
+    panel.tag_form.tags_from_name_button.click()
+    assert not panel.tag_form.apply_button.isEnabled()
+    assert panel.tag_form.field_inputs[TagField.ARTIST].placeholderText() == ""
+
+
+def test_typed_field_overrides_tags_from_name(qtbot: QtBot):
+    panel = make_named_panel(qtbot)
+    select_rows(panel, 0, 1)
+    panel.tag_form.tags_from_name_button.click()
+    type_tag(panel, TagField.ARTIST, "Band")
+    assert get_artist_and_title(panel, 0) == ("Band", "Jazz")
+    assert get_artist_and_title(panel, 1) == ("Band", "Mustapha")
+    assert panel.tag_form.field_inputs[TagField.TITLE].placeholderText() == "<from file names>"
+
+
+def test_reset_drops_tags_from_name(qtbot: QtBot):
+    panel = make_named_panel(qtbot)
+    select_rows(panel, 0, 1)
+    panel.tag_form.tags_from_name_button.click()
+    panel.tag_form.reset_button.click()
+    assert get_artist_and_title(panel, 0) == ("", "")
+    assert not panel.tag_form.apply_button.isEnabled()
+
+
+def test_name_buttons_need_a_selection(qtbot: QtBot):
+    panel = make_named_panel(qtbot)
+    assert not panel.tag_form.tags_from_name_button.isEnabled()
+    assert not panel.tag_form.name_from_tags_button.isEnabled()
+    select_rows(panel, 0)
+    assert panel.tag_form.tags_from_name_button.isEnabled()
+    assert panel.tag_form.name_from_tags_button.isEnabled()
+
+
+OLD_ARTIST = {TagField.ARTIST: "Old"}
+
+
+@pytest.mark.parametrize("rows", [(0,), (0, 1)])
+def test_typing_the_original_value_overrides_tags_from_name(qtbot: QtBot, rows: tuple[int, ...]):
+    store = FakeTagStore({QUEEN: OLD_ARTIST, FREDDIE: OLD_ARTIST})
+    panel = make_named_panel(qtbot, store)
+    select_rows(panel, *rows)
+    panel.tag_form.tags_from_name_button.click()
+    type_tag(panel, TagField.ARTIST, "Old")
+    assert {get_cell(panel, row, ARTIST_COLUMN) for row in rows} == {"Old"}
+
+
+def test_erasing_a_typed_field_goes_back_to_tags_from_name(qtbot: QtBot):
+    store = FakeTagStore({QUEEN: OLD_ARTIST, FREDDIE: OLD_ARTIST})
+    panel = make_named_panel(qtbot, store)
+    select_rows(panel, 0, 1)
+    panel.tag_form.tags_from_name_button.click()
+    type_tag(panel, TagField.ARTIST, "X")
+    type_tag(panel, TagField.ARTIST, "")
+    artist_input = panel.tag_form.field_inputs[TagField.ARTIST]
+    assert artist_input.placeholderText() == "<from file names>"
+    assert get_artist_and_title(panel, 0) == ("Queen", "Jazz")
+
+
+def test_clear_action_drops_one_field_from_names(qtbot: QtBot):
+    store = FakeTagStore()
+    panel = make_named_panel(qtbot, store)
+    select_rows(panel, 0)
+    panel.tag_form.tags_from_name_button.click()
+    assert panel.tag_form.clear_actions[TagField.ARTIST].isVisible()
+    panel.tag_form.clear_actions[TagField.ARTIST].trigger()
+    assert get_artist_and_title(panel, 0) == ("", "Jazz")
+
+
+def test_tags_from_name_skip_values_already_tagged(qtbot: QtBot):
+    store = FakeTagStore({QUEEN: {TagField.ARTIST: "Queen", TagField.TITLE: "Jazz"}})
+    panel = make_named_panel(qtbot, store)
+    select_rows(panel, 0)
+    panel.tag_form.tags_from_name_button.click()
+    assert get_input_text(panel, TagField.ARTIST) == "Queen"
+    assert not panel.tag_form.apply_button.isEnabled()
+    assert panel.status_label.text() == ""
+
+
+def test_tags_from_name_keep_fields_without_name_values(qtbot: QtBot):
+    panel = make_named_panel(qtbot, FakeTagStore({UNNAMED: OLD_ARTIST}))
+    select_rows(panel, 2)
+    type_tag(panel, TagField.GENRE, "Rock")
+    panel.tag_form.tags_from_name_button.click()
+    assert get_input_text(panel, TagField.ARTIST) == "Old"
+    type_tag(panel, TagField.ARTIST, "X")
+    type_tag(panel, TagField.ARTIST, "Old")
+    assert get_cell(panel, 2, ARTIST_COLUMN, Qt.ItemDataRole.ForegroundRole) is None
+
+
+def test_clearing_a_missing_tag_writes_nothing(qtbot: QtBot):
+    store = FakeTagStore()
+    panel = make_named_panel(qtbot, store)
+    select_rows(panel, 0, 2)
+    panel.tag_form.tags_from_name_button.click()
+    panel.tag_form.clear_actions[TagField.ARTIST].trigger()
+    apply_tags(qtbot, panel)
+    assert UNNAMED not in store.tags
+    assert panel.status_label.text() == "1 tagged, 0 failed."
+
+
+def test_typing_the_current_value_is_not_written(qtbot: QtBot):
+    store = FakeTagStore({QUEEN: {TagField.ARTIST: "Old", TagField.TITLE: "Jazz"}})
+    panel = make_named_panel(qtbot, store)
+    select_rows(panel, 0)
+    panel.tag_form.tags_from_name_button.click()
+    type_tag(panel, TagField.ARTIST, "Old")
+    assert not panel.tag_form.apply_button.isEnabled()

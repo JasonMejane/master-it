@@ -1,9 +1,12 @@
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLineEdit, QPushButton, QWidget
 
-from masterit.gui.library_context import RelocationContext
-from masterit.library.destinations import make_rename_destination
+from masterit.gui.library_context import RenameContext
+from masterit.library.destinations import DestinationMaker, make_rename_destination
+from masterit.library.library_layout import TagReader, make_tag_name_destination
 from masterit.library.relocation import (
     RelocationPlan,
     apply_relocation_plan,
@@ -11,7 +14,29 @@ from masterit.library.relocation import (
 )
 from masterit.library.rename_rules import AddPrefix, AddSuffix, RemoveText, RenameRule, SetName
 
-OPERATIONS = (("Remove text", RemoveText), ("Add prefix", AddPrefix), ("Add suffix", AddSuffix))
+type DestinationFactory = Callable[[str, TagReader], DestinationMaker]
+
+
+@dataclass(frozen=True)
+class RenameOperation:
+    label: str
+    make_destination: DestinationFactory
+    uses_text: bool = True
+
+
+def make_rule_operation(label: str, rule: Callable[[str], RenameRule]) -> RenameOperation:
+    return RenameOperation(label, lambda text, _: make_rename_destination(rule(text)))
+
+
+NAME_FROM_TAGS = RenameOperation(
+    "Name from tags", lambda _, read_tags: make_tag_name_destination(read_tags), uses_text=False
+)
+OPERATIONS = (
+    make_rule_operation("Remove text", RemoveText),
+    make_rule_operation("Add prefix", AddPrefix),
+    make_rule_operation("Add suffix", AddSuffix),
+    NAME_FROM_TAGS,
+)
 
 
 def remove_extension(name: str, suffix: str) -> str:
@@ -19,7 +44,7 @@ def remove_extension(name: str, suffix: str) -> str:
 
 
 class RenameBar(QWidget):
-    def __init__(self, context: RelocationContext) -> None:
+    def __init__(self, context: RenameContext) -> None:
         super().__init__()
         self._context = context
         self._plan = RelocationPlan(())
@@ -30,11 +55,17 @@ class RenameBar(QWidget):
         self.apply_button.clicked.connect(self.apply_rename)
 
     def refresh_preview(self) -> None:
-        self._plan = make_relocation_plan(
-            self._context.get_selected_paths(), make_rename_destination(self._make_rule())
+        operation = self._get_operation()
+        self.rename_text_input.setEnabled(operation.uses_text)
+        destination = operation.make_destination(
+            self.rename_text_input.text(), self._context.get_tags
         )
+        self._plan = make_relocation_plan(self._context.get_selected_paths(), destination)
         self._context.show_preview(self._plan)
         self.apply_button.setEnabled(bool(self._plan.valid_entries) and not self._context.is_busy)
+
+    def use_name_from_tags(self) -> None:
+        self.operation_input.setCurrentIndex(self.operation_input.findText(NAME_FROM_TAGS.label))
 
     def apply_rename(self) -> None:
         if self._context.is_busy:
@@ -61,13 +92,13 @@ class RenameBar(QWidget):
         if plan.entries:
             self._context.finish_relocation("renamed", apply_relocation_plan(plan), skipped=0)
 
-    def _make_rule(self) -> RenameRule:
-        return self.operation_input.currentData()(self.rename_text_input.text())
+    def _get_operation(self) -> RenameOperation:
+        return OPERATIONS[self.operation_input.currentIndex()]
 
     def _build_widgets(self) -> None:
         self.operation_input = QComboBox()
-        for label, rule in OPERATIONS:
-            self.operation_input.addItem(label, rule)
+        for operation in OPERATIONS:
+            self.operation_input.addItem(operation.label)
         self.rename_text_input = QLineEdit()
         self.rename_text_input.setPlaceholderText("Text")
         self.apply_button = QPushButton("Rename selected")

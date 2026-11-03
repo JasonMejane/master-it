@@ -7,8 +7,9 @@ from PySide6.QtWidgets import QFileDialog, QLineEdit
 from pytestqt.qtbot import QtBot
 
 from masterit.gui.library_panel import LibraryPanel
-from masterit.library.rename_rules import AddPrefix, AddSuffix, RemoveText
+from masterit.tags.fields import TagField
 
+from ..tags.fakes import FakeTagStore
 from .library_helpers import choose, get_names, make_files, make_panel, open_folder, select_rows
 
 
@@ -17,10 +18,8 @@ def get_previews(panel: LibraryPanel) -> list[object]:
     return [model.data(model.index(row, 1)) for row in range(model.rowCount())]
 
 
-def set_rule(panel: LibraryPanel, rule: type, text: str) -> None:
-    panel.rename_bar.operation_input.setCurrentIndex(
-        panel.rename_bar.operation_input.findData(rule)
-    )
+def set_rule(panel: LibraryPanel, label: str, text: str) -> None:
+    panel.rename_bar.operation_input.setCurrentText(label)
     panel.rename_bar.rename_text_input.setText(text)
 
 
@@ -75,12 +74,12 @@ def test_preview_follows_selection_and_rule(qtbot: QtBot, tmp_path: Path):
     panel = make_panel(qtbot)
     for path in make_files(tmp_path, "A (Official Video).mp3", "B (Official Video).mp3"):
         panel.add_downloaded_file(path)
-    set_rule(panel, RemoveText, "Official Video")
+    set_rule(panel, "Remove text", "Official Video")
     assert get_previews(panel) == ["", ""]
     select_rows(panel, 1)
     assert get_previews(panel) == ["", "B.mp3"]
     assert panel.rename_bar.apply_button.isEnabled()
-    set_rule(panel, AddSuffix, " (Live)")
+    set_rule(panel, "Add suffix", " (Live)")
     assert get_previews(panel) == ["", "B (Official Video) (Live).mp3"]
 
 
@@ -89,7 +88,7 @@ def test_apply_renames_selected_files_and_reports(qtbot: QtBot, tmp_path: Path):
     for path in make_files(tmp_path, "A.mp3", "B.mp3", "X B.mp3"):
         panel.add_downloaded_file(path)
     select_rows(panel, 0, 1)
-    set_rule(panel, AddPrefix, "X ")
+    set_rule(panel, "Add prefix", "X ")
     panel.rename_bar.apply_button.click()
     assert get_names(panel) == ["X A.mp3", "B.mp3", "X B.mp3"]
     assert (tmp_path / "X A.mp3").exists()
@@ -105,7 +104,7 @@ def test_apply_in_folder_updates_rows_in_place(
     make_files(tmp_path, "B.mp3", "C.mp3")
     open_folder(panel, tmp_path, monkeypatch)
     select_rows(panel, 1)
-    set_rule(panel, AddPrefix, "A ")
+    set_rule(panel, "Add prefix", "A ")
     panel.rename_bar.apply_button.click()
     assert get_names(panel) == ["B.mp3", "A C.mp3"]
 
@@ -118,7 +117,7 @@ def test_renamed_session_file_keeps_new_path_in_session(
     panel.add_downloaded_file(song)
     open_folder(panel, tmp_path, monkeypatch)
     select_rows(panel, 0)
-    set_rule(panel, AddPrefix, "X ")
+    set_rule(panel, "Add prefix", "X ")
     panel.rename_bar.apply_button.click()
     panel.source_bar.session_button.click()
     assert get_names(panel) == ["X Song.mp3"]
@@ -129,7 +128,7 @@ def test_failed_rename_shows_error(qtbot: QtBot, tmp_path: Path):
     [song] = make_files(tmp_path, "Song.mp3")
     panel.add_downloaded_file(song)
     select_rows(panel, 0)
-    set_rule(panel, AddPrefix, "X ")
+    set_rule(panel, "Add prefix", "X ")
     song.unlink()
     panel.rename_bar.apply_button.click()
     assert panel.status_label.text().startswith("0 renamed, 0 skipped, 1 failed. Song.mp3: ")
@@ -206,3 +205,58 @@ def test_side_panel_takes_about_a_third_by_default(qtbot: QtBot):
     panel.show()
     table_width, side_width = panel.content_splitter.sizes()
     assert side_width / (table_width + side_width) == pytest.approx(0.3, abs=0.05)
+
+
+def make_tagged_files_panel(qtbot: QtBot, tmp_path: Path) -> LibraryPanel:
+    tagged, untitled = make_files(tmp_path, "x.mp3", "y.mp3")
+    store = FakeTagStore(
+        {
+            tagged: {TagField.ARTIST: "Queen", TagField.TITLE: "Jazz"},
+            untitled: {TagField.ARTIST: "Queen"},
+        }
+    )
+    panel = make_panel(qtbot, tag_store=store)
+    for path in (tagged, untitled):
+        panel.add_downloaded_file(path)
+    return panel
+
+
+def test_name_from_tags_previews_names_in_the_rename_bar(qtbot: QtBot, tmp_path: Path):
+    panel = make_tagged_files_panel(qtbot, tmp_path)
+    select_rows(panel, 0, 1)
+    panel.tag_form.name_from_tags_button.click()
+    assert panel.rename_bar.operation_input.currentText() == "Name from tags"
+    assert not panel.rename_bar.rename_text_input.isEnabled()
+    assert get_previews(panel) == ["Queen - Jazz.mp3", "⚠ No title tag"]
+    assert panel.rename_bar.apply_button.isEnabled()
+
+
+def test_name_from_tags_renames_on_apply(qtbot: QtBot, tmp_path: Path):
+    panel = make_tagged_files_panel(qtbot, tmp_path)
+    select_rows(panel, 0, 1)
+    panel.tag_form.name_from_tags_button.click()
+    panel.rename_bar.apply_button.click()
+    assert get_names(panel) == ["Queen - Jazz.mp3", "y.mp3"]
+    assert (tmp_path / "Queen - Jazz.mp3").exists()
+    assert panel.status_label.text() == "1 renamed, 1 skipped, 0 failed."
+
+
+def test_text_operations_use_the_text_again(qtbot: QtBot, tmp_path: Path):
+    panel = make_tagged_files_panel(qtbot, tmp_path)
+    select_rows(panel, 0)
+    panel.tag_form.name_from_tags_button.click()
+    set_rule(panel, "Add prefix", "A ")
+    assert panel.rename_bar.rename_text_input.isEnabled()
+    assert get_previews(panel)[0] == "A x.mp3"
+
+
+def test_overwritten_download_refreshes_the_name_from_tags_preview(qtbot: QtBot, tmp_path: Path):
+    [song] = make_files(tmp_path, "x.mp3")
+    store = FakeTagStore({song: {TagField.ARTIST: "Queen", TagField.TITLE: "Jazz"}})
+    panel = make_panel(qtbot, tag_store=store)
+    panel.add_downloaded_file(song)
+    select_rows(panel, 0)
+    panel.tag_form.name_from_tags_button.click()
+    store.tags[song] = {TagField.ARTIST: "Queen", TagField.TITLE: "Mustapha"}
+    panel.add_downloaded_file(song)
+    assert get_previews(panel) == ["Queen - Mustapha.mp3"]

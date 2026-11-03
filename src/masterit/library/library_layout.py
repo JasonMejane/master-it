@@ -69,3 +69,23 @@ def make_album_destination(
         return Destination(folder, f"{stem}{source.suffix}")
 
     return make_destination
+
+
+def make_tag_name_destination(read_tags: TagReader) -> DestinationMaker:
+    def make_destination(source: Path) -> Destination:
+        tags = read_tags(source)
+        artist = make_folder_artist(tags.get(TagField.ARTIST, ""))
+        title = make_safe_name(tags.get(TagField.TITLE, ""))
+        problem = find_tag_name_problem(artist, title)
+        if problem is not None:
+            return Destination(source.parent, source.name, problem)
+        stem = fit_bytes(f"{artist} - {title}", MAX_NAME_BYTES - len(source.suffix.encode()))
+        return Destination(source.parent, f"{stem}{source.suffix}")
+
+    return make_destination
+
+
+def find_tag_name_problem(artist: str, title: str) -> RelocationProblem | None:
+    if not title:
+        return RelocationProblem.MISSING_TITLE
+    return None if artist else RelocationProblem.MISSING_ARTIST

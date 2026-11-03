@@ -7,3 +7,4 @@ class RelocationProblem(StrEnum):
     DUPLICATE_TARGET = "Several files would get this name"
     TARGET_EXISTS = "A file with this name already exists"
     MISSING_TITLE = "No title tag"
+    MISSING_ARTIST = "No artist tag"

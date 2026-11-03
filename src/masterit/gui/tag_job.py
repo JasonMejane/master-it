@@ -15,11 +15,10 @@ class TagSignals(QObject):
 
 
 class TagJob(QRunnable):
-    def __init__(self, paths: list[Path], edits: Tags, store: TagStore) -> None:
+    def __init__(self, edits_by_path: dict[Path, Tags], store: TagStore) -> None:
         super().__init__()
         self.signals = TagSignals()
-        self._paths = paths
-        self._edits = edits
+        self._edits_by_path = edits_by_path
         self._store = store
         self._outcomes: list[TagOutcome] = []
 
@@ -33,6 +32,7 @@ class TagJob(QRunnable):
             self.signals.finished.emit(self._outcomes)
 
     def _write_tags(self) -> None:
-        for done, path in enumerate(self._paths, start=1):
-            self._outcomes.append(write_tag_edits(path, self._edits, self._store))
-            self.signals.progress.emit(done, len(self._paths))
+        total = len(self._edits_by_path)
+        for done, (path, edits) in enumerate(self._edits_by_path.items(), start=1):
+            self._outcomes.append(write_tag_edits(path, edits, self._store))
+            self.signals.progress.emit(done, total)

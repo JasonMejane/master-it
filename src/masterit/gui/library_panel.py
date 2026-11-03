@@ -78,6 +78,7 @@ class LibraryPanel(QWidget):
         self.table_model.refresh_tags([path])
         self.cover_view.forget([path])
         self.cover_view.load_selection()
+        self.rename_bar.refresh_preview()
 
     def open_folder(self, folder: Path) -> None:
         self._source.open_folder(folder)
@@ -107,8 +108,8 @@ class LibraryPanel(QWidget):
     def get_tags(self, path: Path) -> Tags:
         return self.table_model.get_tags(path)
 
-    def show_tag_preview(self, paths: Iterable[Path], edits: Tags) -> None:
-        self.table_model.set_tag_preview(paths, edits)
+    def show_tag_preview(self, edits_by_path: Mapping[Path, Tags]) -> None:
+        self.table_model.set_tag_preview(edits_by_path)
 
     def finish_tagging(self, paths: list[Path], outcomes: list[TagOutcome]) -> None:
         self.table_model.refresh_tags(paths)
@@ -186,6 +187,7 @@ class LibraryPanel(QWidget):
             action.finished.connect(lambda: self._set_busy(False))
             action.finished.connect(self.work_finished)
         # Queued: renaming reloads the model, which must not happen inside the editor commit.
+        self.tag_form.name_from_tags_requested.connect(self.rename_bar.use_name_from_tags)
         self.table_model.rename_requested.connect(
             self.rename_bar.rename_single_file, Qt.ConnectionType.QueuedConnection
         )

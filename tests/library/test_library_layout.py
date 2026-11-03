@@ -8,6 +8,7 @@ from masterit.library.library_layout import (
     make_album_destination,
     make_folder_artist,
     make_safe_name,
+    make_tag_name_destination,
 )
 from masterit.library.relocation import RelocationProblem, make_relocation_plan
 from masterit.tags.fields import TagField, Tags
@@ -105,3 +106,35 @@ def test_long_artist_keeps_the_title():
 def test_folder_artist_is_safe_and_cut_to_120_bytes():
     assert make_folder_artist(" AC/DC ") == "AC-DC"
     assert make_folder_artist("é" * 100) == "é" * 60
+
+
+def make_tag_name(tags: Tags, source: Path = SONG) -> Destination:
+    return make_tag_name_destination(lambda path: tags)(source)
+
+
+def test_tag_name_is_artist_dash_title_in_the_same_folder():
+    tags = {TagField.ARTIST: "AC/DC", TagField.TITLE: "What? Now"}
+    assert make_tag_name(tags) == Destination(SONG.parent, "AC-DC - What_ Now.mp3")
+
+
+def test_long_tag_name_fits_the_name_limit():
+    tags = {TagField.ARTIST: "A", TagField.TITLE: "é" * 200}
+    assert len(make_tag_name(tags).file_name.encode()) <= 255
+
+
+@pytest.mark.parametrize(
+    ("tags", "problem"),
+    [
+        ({TagField.ARTIST: "Queen"}, RelocationProblem.MISSING_TITLE),
+        ({TagField.ARTIST: "Queen", TagField.TITLE: "..."}, RelocationProblem.MISSING_TITLE),
+        ({TagField.TITLE: "Jazz"}, RelocationProblem.MISSING_ARTIST),
+    ],
+)
+def test_tag_name_needs_artist_and_title(tags: Tags, problem: RelocationProblem):
+    destination = make_tag_name(tags)
+    assert destination == Destination(SONG.parent, SONG.name, problem)
+
+
+def test_long_artist_leaves_room_for_the_title():
+    tags = {TagField.ARTIST: "A" * 300, TagField.TITLE: "Jazz"}
+    assert make_tag_name(tags).file_name.endswith(" - Jazz.mp3")

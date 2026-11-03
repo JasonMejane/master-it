@@ -17,9 +17,11 @@
 ## Features
 
 - **Download**: Many links at one time. Playlists. Codec mp3, opus, m4a or flac (default mp3 192).
-- **Rename**: Remove text, add a prefix or a suffix, rename one file. A preview shows the new names.
+- **Rename**: Remove text, add a prefix or a suffix, name from tags (`<Artist> - <Title>`),
+  rename one file. A preview shows the new names.
 - **Move**: Move the selected files to a folder. A dialog shows the moves and the conflicts first.
 - **Manual tags**: Edit the tags of the selected files. The app writes only the changed fields.
+  Tags from name sets Artist and Title from `<Artist> - <Title>` file names.
 - **Cover**: Show the embedded cover of the selection.
 - **Auto-tag**: Find the tags and the cover on Discogs, ListenBrainz, MusicBrainz, Deezer,
   iTunes and Last.fm. The app replaces the old tags.

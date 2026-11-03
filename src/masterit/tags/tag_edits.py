@@ -1,5 +1,5 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,6 +44,24 @@ def merge_tag_values(selection: Sequence[Tags]) -> dict[TagField, str | None]:
 def get_shared_value(selection: Sequence[Tags], field: TagField) -> str | None:
     values = {tags.get(field, "") for tags in selection}
     return values.pop() if len(values) == 1 else (None if values else "")
+
+
+def merge_file_edits(
+    paths: Iterable[Path], shared_edits: Tags, file_edits: Mapping[Path, Tags]
+) -> dict[Path, Tags]:
+    merged = {path: {**file_edits.get(path, {}), **shared_edits} for path in paths}
+    return {path: edits for path, edits in merged.items() if edits}
+
+
+def drop_unchanged_tags(
+    file_edits: Mapping[Path, Tags], read_tags: Callable[[Path], Tags]
+) -> dict[Path, Tags]:
+    changed = {path: get_changed_tags(edits, read_tags(path)) for path, edits in file_edits.items()}
+    return {path: edits for path, edits in changed.items() if edits}
+
+
+def get_changed_tags(edits: Tags, current: Tags) -> Tags:
+    return {field: value for field, value in edits.items() if current.get(field, "") != value}
 
 
 def write_tag_edits(path: Path, edits: Tags, store: TagStore) -> TagOutcome:
