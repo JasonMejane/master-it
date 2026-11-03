@@ -321,3 +321,48 @@ def test_clicking_a_selected_checkbox_keeps_the_selection(qtbot: QtBot, tmp_path
         QTest.mouseClick(viewport, Qt.MouseButton.LeftButton, pos=get_checkbox_center(panel, 1))
         assert [get_status(panel, row) for row in range(2)] == ["Will skip", "Will skip"]
     assert get_selected_rows(panel) == [0, 1]
+
+
+def test_form_and_table_share_a_vertical_splitter(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    splitter = panel.content_splitter
+    form_part = splitter.widget(0)
+    assert splitter.orientation() == Qt.Orientation.Vertical
+    assert form_part is not None
+    assert form_part.isAncestorOf(panel.url_input)
+    assert form_part.isAncestorOf(panel.download_button)
+    assert splitter.widget(1) is panel.table_view
+    assert not splitter.childrenCollapsible()
+
+
+def test_links_box_grows_with_the_form_part(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    panel.resize(900, 900)
+    panel.show()
+    initial_height = panel.url_input.height()
+    panel.content_splitter.setSizes([600, 300])
+    qtbot.waitUntil(lambda: panel.url_input.height() > initial_height + 100)
+
+
+def test_download_layout_state_is_restored(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    restored = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    for shown in (panel, restored):
+        shown.resize(900, 900)
+        shown.show()
+    panel.content_splitter.setSizes([500, 400])
+    state = panel.get_layout_state()
+    assert state is not None
+    restored.restore_layout_state(state)
+    assert restored.content_splitter.sizes() == panel.content_splitter.sizes()
+
+
+def test_never_shown_download_panel_has_no_layout_state(qtbot: QtBot, tmp_path: Path):
+    assert PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel.get_layout_state() is None
+
+
+def test_links_box_opens_at_its_former_capped_height(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    panel.resize(900, 900)
+    panel.show()
+    assert panel.url_input.height() == 120

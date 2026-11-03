@@ -1,7 +1,17 @@
 from collections.abc import Callable
 from pathlib import Path
+from typing import override
 
-from PySide6.QtCore import QItemSelection, QItemSelectionModel, QThreadPool, QTimer, Signal
+from PySide6.QtCore import (
+    QByteArray,
+    QItemSelection,
+    QItemSelectionModel,
+    QSize,
+    Qt,
+    QThreadPool,
+    QTimer,
+    Signal,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -13,6 +23,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QSplitter,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -28,6 +39,7 @@ from masterit.gui.download_rows import DownloadSummary
 from masterit.gui.download_table_model import CHECK_COLUMN, STATUS_COLUMN, DownloadTableModel
 from masterit.gui.settings_store import SettingsStore
 
+LINKS_DEFAULT_HEIGHT = 120
 MISSING_FFMPEG_MESSAGE = "ffmpeg was not found: install it to download audio."
 
 type DownloaderFactory = Callable[[DownloadSettings], Downloader]
@@ -47,6 +59,13 @@ def format_summary(summary: DownloadSummary) -> str:
         f"{summary.completed} completed, {summary.with_warnings} with warnings, "
         f"{summary.failed} failed{skipped}."
     )
+
+
+class LinksInput(QPlainTextEdit):
+    @override
+    def sizeHint(self) -> QSize:
+        # Only the default split: unlike a max height, the user can still drag it taller.
+        return QSize(super().sizeHint().width(), LINKS_DEFAULT_HEIGHT)
 
 
 class DownloadPanel(QWidget):
@@ -97,6 +116,15 @@ class DownloadPanel(QWidget):
     @property
     def is_running(self) -> bool:
         return self._job is not None
+
+    def get_layout_state(self) -> QByteArray | None:
+        # A splitter never shown has zero sizes, which would restore as a broken layout.
+        if not any(self.content_splitter.sizes()):
+            return None
+        return self.content_splitter.saveState()
+
+    def restore_layout_state(self, state: QByteArray) -> None:
+        self.content_splitter.restoreState(state)
 
     def stop(self) -> None:
         self.cancel_download()
@@ -189,9 +217,8 @@ class DownloadPanel(QWidget):
             self.output_dir_input.setText(folder)
 
     def _build_widgets(self) -> None:
-        self.url_input = QPlainTextEdit()
+        self.url_input = LinksInput()
         self.url_input.setPlaceholderText("Paste one or more YouTube links, one per line")
-        self.url_input.setMaximumHeight(120)
         self.output_dir_input = QLineEdit()
         self.browse_button = QPushButton("Browse…")
         self.codec_input = QComboBox()
@@ -225,10 +252,21 @@ class DownloadPanel(QWidget):
         buttons.addWidget(self.download_button)
         buttons.addWidget(self.cancel_button)
         buttons.addWidget(self.status_label, stretch=1)
+        form_part = QWidget()
+        form_column = QVBoxLayout(form_part)
+        form_column.setContentsMargins(0, 0, 0, 0)
+        form_column.addLayout(form)
+        form_column.addLayout(buttons)
         layout = QVBoxLayout(self)
-        layout.addLayout(form)
-        layout.addLayout(buttons)
-        layout.addWidget(self.table_view, stretch=1)
+        layout.addWidget(self._build_content_splitter(form_part))
+
+    def _build_content_splitter(self, form_part: QWidget) -> QSplitter:
+        self.content_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.content_splitter.addWidget(form_part)
+        self.content_splitter.addWidget(self.table_view)
+        self.content_splitter.setChildrenCollapsible(False)
+        self.content_splitter.setStretchFactor(1, 1)
+        return self.content_splitter
 
     def _connect_signals(self) -> None:
         self.codec_input.currentIndexChanged.connect(self._update_quality_availability)

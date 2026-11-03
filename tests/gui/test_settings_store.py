@@ -109,3 +109,12 @@ def test_library_layout_round_trips(tmp_path: Path):
 
 def test_missing_library_layout_is_none(tmp_path: Path):
     assert make_store(tmp_path).load_library_layout() is None
+
+
+def test_download_layout_round_trips(tmp_path: Path):
+    make_store(tmp_path).save_download_layout(QByteArray(b"layout"))
+    assert make_store(tmp_path).load_download_layout() == QByteArray(b"layout")
+
+
+def test_missing_download_layout_is_none(tmp_path: Path):
+    assert make_store(tmp_path).load_download_layout() is None

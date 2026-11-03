@@ -71,14 +71,17 @@ class MainWindow(QMainWindow):
         if self._must_defer_close():
             self._close_when_idle(event)
             return
-        self._save_library_layout()
+        self._save_panel_layouts()
         self._store.save_window_geometry(self.saveGeometry())
         super().closeEvent(event)
 
-    def _save_library_layout(self) -> None:
-        layout = self.library_panel.get_layout_state()
-        if layout is not None:
-            self._store.save_library_layout(layout)
+    def _save_panel_layouts(self) -> None:
+        library_layout = self.library_panel.get_layout_state()
+        if library_layout is not None:
+            self._store.save_library_layout(library_layout)
+        download_layout = self.download_panel.get_layout_state()
+        if download_layout is not None:
+            self._store.save_download_layout(download_layout)
 
     def _must_defer_close(self) -> bool:
         # A second close may abandon a download, never a move or tag write (partial file risk).
@@ -109,9 +112,15 @@ class MainWindow(QMainWindow):
         geometry = self._store.load_window_geometry()
         if geometry is not None:
             self.restoreGeometry(geometry)
-        layout = self._store.load_library_layout()
-        if layout is not None:
-            self.library_panel.restore_layout_state(layout)
+        self._restore_panel_layouts()
+
+    def _restore_panel_layouts(self) -> None:
+        library_layout = self._store.load_library_layout()
+        if library_layout is not None:
+            self.library_panel.restore_layout_state(library_layout)
+        download_layout = self._store.load_download_layout()
+        if download_layout is not None:
+            self.download_panel.restore_layout_state(download_layout)
 
 
 def get_default_music_folder() -> Path:

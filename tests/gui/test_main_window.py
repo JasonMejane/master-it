@@ -94,6 +94,17 @@ def test_closing_with_library_never_shown_keeps_default_layout(qtbot: QtBot, tmp
     assert side_width < table_width
 
 
+def test_closing_saves_download_layout_and_reopening_restores_it(qtbot: QtBot, tmp_path: Path):
+    window = make_window(qtbot, tmp_path)
+    window.resize(900, 900)
+    window.show()
+    window.download_panel.content_splitter.setSizes([400, 400])
+    window.close()
+    reopened = make_window(qtbot, tmp_path)
+    reopened.show()
+    assert reopened.download_panel.content_splitter.sizes()[0] == 400
+
+
 def make_library(tmp_path: Path, tagger: Tagger | None = None) -> LibraryPanel:
     services = LibraryServices(
         get_download_folder=lambda: tmp_path,
