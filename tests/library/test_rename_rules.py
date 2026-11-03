@@ -38,3 +38,33 @@ def test_prefix_and_suffix_are_added_as_is():
 
 def test_set_name_replaces_name_trimmed():
     assert SetName("  New Song ").make_name("Old") == "New Song"
+
+
+@pytest.mark.parametrize(
+    ("text", "stem", "expected"),
+    [
+        ("AC/DC", "AC\u29f8DC - Song", "Song"),
+        ("Live: 1979", "Song (Live\uff1a 1979)", "Song"),
+        ("| Lyrics", "Song \uff5c Lyrics", "Song"),
+        ('"Best"', "Song \uff02Best\uff02", "Song"),
+        ("Why? *", "Song Why\uff1f \uff0a", "Song"),
+        ("<HD>", "Song \uff1cHD\uff1e", "Song"),
+        ("a\\b", "Song a\u29f9b", "Song"),
+        ("Why\uff1f", "Song Why?", "Song"),
+        ("(Official Video)", "Song\u00a0(Official\u00a0Video)", "Song"),
+        ("Official  Video", "Song (Official Video)", "Song"),
+    ],
+)
+def test_removal_matches_file_name_lookalikes_and_spaces(text: str, stem: str, expected: str):
+    assert RemoveText(text).make_name(stem) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "stem", "expected"),
+    [
+        ("Video ", "Song Video", "Song"),
+        ("   ", "Song  -  Live", "Song  -  Live"),
+    ],
+)
+def test_removal_ignores_spaces_around_the_text(text: str, stem: str, expected: str):
+    assert RemoveText(text).make_name(stem) == expected

@@ -260,3 +260,88 @@ def test_overwritten_download_refreshes_the_name_from_tags_preview(qtbot: QtBot,
     store.tags[song] = {TagField.ARTIST: "Queen", TagField.TITLE: "Mustapha"}
     panel.add_downloaded_file(song)
     assert get_previews(panel) == ["Queen - Mustapha.mp3"]
+
+
+NO_MATCH_HINT = "No selected file name (without extension) contains this text."
+
+
+def make_song_panel(qtbot: QtBot, tmp_path: Path, *names: str) -> LibraryPanel:
+    panel = make_panel(qtbot)
+    for path in make_files(tmp_path, *names):
+        panel.add_downloaded_file(path)
+    return panel
+
+
+def get_hint(panel: LibraryPanel) -> str:
+    return panel.rename_bar.hint_label.text()
+
+
+def test_unmatched_removal_says_so(qtbot: QtBot, tmp_path: Path):
+    panel = make_song_panel(qtbot, tmp_path, "Song.mp3")
+    select_rows(panel, 0)
+    set_rule(panel, "Remove text", "Video")
+    assert get_hint(panel) == NO_MATCH_HINT
+    assert not panel.rename_bar.apply_button.isEnabled()
+
+
+def test_hint_clears_once_the_text_matches(qtbot: QtBot, tmp_path: Path):
+    panel = make_song_panel(qtbot, tmp_path, "Song Video.mp3")
+    select_rows(panel, 0)
+    set_rule(panel, "Remove text", "Videx")
+    set_rule(panel, "Remove text", "Video")
+    assert get_hint(panel) == ""
+
+
+def test_hint_follows_the_selection(qtbot: QtBot, tmp_path: Path):
+    panel = make_song_panel(qtbot, tmp_path, "Song.mp3", "Song Video.mp3")
+    set_rule(panel, "Remove text", "Video")
+    assert get_hint(panel) == ""
+    select_rows(panel, 0)
+    assert get_hint(panel) == NO_MATCH_HINT
+    panel.table_view.clearSelection()
+    select_rows(panel, 1)
+    assert get_hint(panel) == ""
+
+
+@pytest.mark.parametrize(
+    ("label", "text"), [("Remove text", ""), ("Remove text", "   "), ("Add prefix", "X ")]
+)
+def test_no_hint_without_text_or_for_other_rules(
+    qtbot: QtBot, tmp_path: Path, label: str, text: str
+):
+    panel = make_song_panel(qtbot, tmp_path, "Song.mp3")
+    select_rows(panel, 0)
+    set_rule(panel, label, text)
+    assert get_hint(panel) == ""
+
+
+def test_hint_leaves_the_status_alone(qtbot: QtBot, tmp_path: Path):
+    panel = make_song_panel(qtbot, tmp_path, "Song.mp3")
+    select_rows(panel, 0)
+    panel.show_status("2 tagged, 0 failed.")
+    set_rule(panel, "Remove text", "Video")
+    assert panel.status_label.text() == "2 tagged, 0 failed."
+
+
+def test_name_from_tags_with_names_already_right_gives_no_hint(qtbot: QtBot, tmp_path: Path):
+    [song] = make_files(tmp_path, "Queen - Jazz.mp3")
+    store = FakeTagStore({song: {TagField.ARTIST: "Queen", TagField.TITLE: "Jazz"}})
+    panel = make_panel(qtbot, tag_store=store)
+    panel.add_downloaded_file(song)
+    select_rows(panel, 0)
+    set_rule(panel, "Remove text", "x")
+    panel.tag_form.name_from_tags_button.click()
+    assert get_hint(panel) == ""
+
+
+def test_hint_does_not_move_the_rename_bar(qtbot: QtBot, tmp_path: Path):
+    panel = make_song_panel(qtbot, tmp_path, "Song.mp3")
+    panel.resize(900, 600)
+    panel.show()
+    select_rows(panel, 0)
+    set_rule(panel, "Remove text", "Song")
+    sizes = (panel.rename_bar.rename_text_input.size(), panel.minimumSizeHint())
+    set_rule(panel, "Remove text", "Video")
+    qtbot.wait(10)
+    assert get_hint(panel) == NO_MATCH_HINT
+    assert (panel.rename_bar.rename_text_input.size(), panel.minimumSizeHint()) == sizes

@@ -2,7 +2,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLineEdit, QPushButton, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from masterit.gui.library_context import RenameContext
 from masterit.library.destinations import DestinationMaker, make_rename_destination
@@ -22,17 +30,25 @@ class RenameOperation:
     label: str
     make_destination: DestinationFactory
     uses_text: bool = True
+    no_change_hint: str = ""
 
 
-def make_rule_operation(label: str, rule: Callable[[str], RenameRule]) -> RenameOperation:
-    return RenameOperation(label, lambda text, _: make_rename_destination(rule(text)))
+def make_rule_operation(
+    label: str, rule: Callable[[str], RenameRule], no_change_hint: str = ""
+) -> RenameOperation:
+    def make_destination(text: str, read_tags: TagReader) -> DestinationMaker:
+        return make_rename_destination(rule(text))
+
+    return RenameOperation(label, make_destination, no_change_hint=no_change_hint)
 
 
 NAME_FROM_TAGS = RenameOperation(
     "Name from tags", lambda _, read_tags: make_tag_name_destination(read_tags), uses_text=False
 )
 OPERATIONS = (
-    make_rule_operation("Remove text", RemoveText),
+    make_rule_operation(
+        "Remove text", RemoveText, "No selected file name (without extension) contains this text."
+    ),
     make_rule_operation("Add prefix", AddPrefix),
     make_rule_operation("Add suffix", AddSuffix),
     NAME_FROM_TAGS,
@@ -63,6 +79,12 @@ class RenameBar(QWidget):
         self._plan = make_relocation_plan(self._context.get_selected_paths(), destination)
         self._context.show_preview(self._plan)
         self.apply_button.setEnabled(bool(self._plan.valid_entries) and not self._context.is_busy)
+        self.hint_label.setText(self._get_hint(operation))
+
+    def _get_hint(self, operation: RenameOperation) -> str:
+        has_text = bool(self.rename_text_input.text().strip())
+        is_unchanged = bool(self._context.get_selected_paths()) and not self._plan.entries
+        return operation.no_change_hint if has_text and is_unchanged else ""
 
     def use_name_from_tags(self) -> None:
         self.operation_input.setCurrentIndex(self.operation_input.findText(NAME_FROM_TAGS.label))
@@ -103,10 +125,17 @@ class RenameBar(QWidget):
         self.rename_text_input.setPlaceholderText("Text")
         self.apply_button = QPushButton("Rename selected")
         self.apply_button.setEnabled(False)
+        self.hint_label = QLabel()
+        # A line is kept for the hint so the bar does not jump while typing.
+        self.hint_label.setMinimumHeight(self.hint_label.fontMetrics().height())
+        self.hint_label.setWordWrap(True)
 
     def _build_layout(self) -> None:
-        layout = QHBoxLayout(self)
+        row = QHBoxLayout()
+        row.addWidget(self.operation_input)
+        row.addWidget(self.rename_text_input, stretch=1)
+        row.addWidget(self.apply_button)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.operation_input)
-        layout.addWidget(self.rename_text_input, stretch=1)
-        layout.addWidget(self.apply_button)
+        layout.addLayout(row)
+        layout.addWidget(self.hint_label)
