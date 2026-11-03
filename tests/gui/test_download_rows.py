@@ -24,7 +24,7 @@ from masterit.gui.download_rows import (
 
 SONG = ItemRef("id1", "Song")
 OTHER = ItemRef("id2", "Other")
-PENDING_SONG = DownloadRow("Song", RowStatus.PENDING, 0.0, "")
+PENDING_SONG = DownloadRow("Song", "b", RowStatus.PENDING, 0.0, "")
 
 
 def get_titles(rows: DownloadRows) -> list[str]:
@@ -34,7 +34,7 @@ def get_titles(rows: DownloadRows) -> list[str]:
 def test_progress_adds_downloading_row():
     rows = DownloadRows()
     assert rows.apply(ItemProgress("a", SONG, 42.0)) == 0
-    assert rows.get_row(0) == DownloadRow("Song", RowStatus.DOWNLOADING, 42.0, "")
+    assert rows.get_row(0) == DownloadRow("Song", "a", RowStatus.DOWNLOADING, 42.0, "")
 
 
 def test_events_of_same_item_update_its_row():
@@ -42,7 +42,9 @@ def test_events_of_same_item_update_its_row():
     rows.apply(ItemProgress("a", ItemRef("id1", "Song (Official Video)"), 10.0))
     assert rows.apply(ItemCompleted("a", SONG, Path("/music/Song.mp3"))) == 0
     assert rows.count == 1
-    assert rows.get_row(0) == DownloadRow("Song", RowStatus.COMPLETED, 100.0, "/music/Song.mp3")
+    assert rows.get_row(0) == DownloadRow(
+        "Song", "a", RowStatus.COMPLETED, 100.0, "/music/Song.mp3"
+    )
 
 
 def test_same_item_id_from_other_url_gets_own_row():
@@ -54,27 +56,29 @@ def test_same_item_id_from_other_url_gets_own_row():
 def test_completion_with_warnings_is_flagged():
     rows = DownloadRows()
     rows.apply(ItemCompleted("a", SONG, Path("/music/Song.mp3"), ("no cover", "no tags")))
-    assert rows.get_row(0) == DownloadRow("Song", RowStatus.WARNING, 100.0, "no cover; no tags")
+    assert rows.get_row(0) == DownloadRow(
+        "Song", "a", RowStatus.WARNING, 100.0, "no cover; no tags"
+    )
 
 
 def test_failed_item_keeps_its_progress():
     rows = DownloadRows()
     rows.apply(ItemProgress("a", SONG, 30.0))
     rows.apply(ItemFailed("a", SONG, "network down"))
-    assert rows.get_row(0) == DownloadRow("Song", RowStatus.FAILED, 30.0, "network down")
+    assert rows.get_row(0) == DownloadRow("Song", "a", RowStatus.FAILED, 30.0, "network down")
 
 
 def test_failures_without_item_each_get_a_row_named_after_url():
     rows = DownloadRows()
     rows.apply(ItemFailed("a", None, "unavailable"))
     assert rows.apply(ItemFailed("a", None, "private")) == 1
-    assert rows.get_row(1) == DownloadRow("a", RowStatus.FAILED, 0.0, "private")
+    assert rows.get_row(1) == DownloadRow("a", "a", RowStatus.FAILED, 0.0, "private")
 
 
 def test_links_start_as_pending_rows_named_after_url():
     rows = DownloadRows()
     rows.add_links(["a", "b"])
-    assert rows.get_row(1) == DownloadRow("b", RowStatus.PENDING, 0.0, "")
+    assert rows.get_row(1) == DownloadRow("b", "b", RowStatus.PENDING, 0.0, "")
 
 
 def test_first_item_of_a_link_replaces_its_pending_row():
@@ -107,7 +111,7 @@ def test_failure_without_item_takes_the_pending_row_of_its_link():
     rows = DownloadRows()
     rows.add_links(["a", "b"])
     assert rows.apply(ItemFailed("a", None, "Unsupported URL")) == 0
-    assert rows.get_row(0) == DownloadRow("a", RowStatus.FAILED, 0.0, "Unsupported URL")
+    assert rows.get_row(0) == DownloadRow("a", "a", RowStatus.FAILED, 0.0, "Unsupported URL")
     assert rows.apply(ItemFailed("a", None, "again")) == 1
     assert get_titles(rows) == ["a", "a", "b"]
 
@@ -156,7 +160,7 @@ def test_unfinished_rows_are_marked_cancelled():
     rows.apply(ItemCompleted("b", SONG, Path("/music/Song.mp3")))
     rows.add_links(["c"])
     rows.mark_unfinished_cancelled()
-    assert rows.get_row(0) == DownloadRow("Song", RowStatus.CANCELLED, 40.0, "")
+    assert rows.get_row(0) == DownloadRow("Song", "a", RowStatus.CANCELLED, 40.0, "")
     assert rows.get_row(1).status == RowStatus.COMPLETED
     assert rows.get_row(2).status == RowStatus.CANCELLED
 
@@ -167,7 +171,7 @@ def test_pending_rows_left_at_the_end_failed():
     rows.add_links(["b"])
     rows.mark_pending_failed()
     assert rows.get_row(0).status == RowStatus.DOWNLOADING
-    assert rows.get_row(1) == DownloadRow("b", RowStatus.FAILED, 0.0, "Not downloaded")
+    assert rows.get_row(1) == DownloadRow("b", "b", RowStatus.FAILED, 0.0, "Not downloaded")
 
 
 def make_queued_rows() -> DownloadRows:
@@ -220,7 +224,7 @@ def test_skipped_item_row_is_final():
     rows = make_queued_rows()
     rows.toggle_skip(0, SkipList())
     assert rows.apply(ItemSkipped("a", SONG)) == 0
-    assert rows.get_row(0) == DownloadRow("Song", RowStatus.SKIPPED, 0.0, "")
+    assert rows.get_row(0) == DownloadRow("Song", "a", RowStatus.SKIPPED, 0.0, "")
     assert not rows.can_toggle_skip(0)
 
 
@@ -229,7 +233,7 @@ def test_skipped_link_takes_its_pending_row():
     rows.add_links(["a"])
     rows.toggle_skip(0, SkipList())
     assert rows.apply(ItemSkipped("a", None)) == 0
-    assert rows.get_row(0) == DownloadRow("a", RowStatus.SKIPPED, 0.0, "")
+    assert rows.get_row(0) == DownloadRow("a", "a", RowStatus.SKIPPED, 0.0, "")
 
 
 def test_link_started_before_its_skip_is_replaced_by_its_items():
@@ -260,7 +264,7 @@ def test_started_link_cannot_be_skipped():
     rows = DownloadRows()
     rows.add_links(["a"])
     assert rows.apply(LinkStarted("a")) == 0
-    assert rows.get_row(0) == DownloadRow("a", RowStatus.STARTED, 0.0, "")
+    assert rows.get_row(0) == DownloadRow("a", "a", RowStatus.STARTED, 0.0, "")
     assert not rows.can_toggle_skip(0)
 
 
@@ -285,7 +289,7 @@ def test_started_link_without_items_fails_at_the_end():
     rows.add_links(["a"])
     rows.apply(LinkStarted("a"))
     rows.mark_pending_failed()
-    assert rows.get_row(0) == DownloadRow("a", RowStatus.FAILED, 0.0, "Not downloaded")
+    assert rows.get_row(0) == DownloadRow("a", "a", RowStatus.FAILED, 0.0, "Not downloaded")
 
 
 def test_started_link_is_cancelled():
@@ -294,3 +298,39 @@ def test_started_link_is_cancelled():
     rows.apply(LinkStarted("a"))
     rows.mark_unfinished_cancelled()
     assert rows.get_row(0).status == RowStatus.CANCELLED
+
+
+VIDEO = ItemRef("id1", "Song", "https://video/1")
+
+
+def test_item_row_shows_the_item_url():
+    rows = DownloadRows()
+    rows.apply(ItemQueued("list", VIDEO))
+    assert rows.get_row(0).url == "https://video/1"
+
+
+def test_skipped_item_row_shows_the_item_url():
+    rows = DownloadRows()
+    rows.apply(ItemSkipped("list", VIDEO))
+    assert rows.get_row(0).url == "https://video/1"
+
+
+def test_file_without_known_item_shows_the_link_url():
+    rows = DownloadRows()
+    rows.add_links(["list"])
+    rows.apply(ItemCompleted("list", ItemRef("", "Song"), Path("/music/Song.mp3")))
+    assert rows.get_row(0).url == "list"
+
+
+def test_cancelled_row_keeps_its_url():
+    rows = DownloadRows()
+    rows.apply(ItemProgress("list", VIDEO, 5.0))
+    rows.mark_unfinished_cancelled()
+    assert rows.get_row(0).url == "https://video/1"
+
+
+def test_first_item_of_a_link_replaces_the_link_url():
+    rows = DownloadRows()
+    rows.add_links(["list"])
+    rows.apply(ItemQueued("list", VIDEO))
+    assert rows.get_row(0).url == "https://video/1"

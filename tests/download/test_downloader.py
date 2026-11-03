@@ -401,8 +401,36 @@ def test_untitled_flat_entry_is_named_after_its_url():
         ydl.options["match_filter"](info, incomplete=True)
 
     assert run_download(untitled_entry, ["set"]) == [
-        ItemQueued("set", ItemRef("42", "https://sc/track/42"))
+        ItemQueued("set", ItemRef("42", "https://sc/track/42", "https://sc/track/42"))
     ]
+
+
+def match_info(info: dict[str, Any]) -> list[DownloadEvent]:
+    return run_download(
+        lambda ydl, url: ydl.options["match_filter"](info, incomplete=True), ["set"]
+    )
+
+
+def test_completed_item_url_is_its_page_not_its_media():
+    def complete(ydl: FakeYoutubeDL, url: str) -> None:
+        info = {"id": "42", "title": "Song", "extractor_key": "Youtube"}
+        resolved = {**info, "url": "https://cdn/42.webm", "webpage_url": "https://yt/42"}
+        ydl.options["match_filter"](resolved, incomplete=False)
+        ydl.finish_file("/music/Song.mp3")
+
+    item = ItemRef("42", "Song", "https://yt/42")
+    assert run_download(complete, ["a"]) == [ItemCompleted("a", item, Path("/music/Song.mp3"))]
+
+
+def test_full_listed_entry_has_no_media_url():
+    info = {"id": "42", "title": "Song", "url": "https://cdn/42.mp4"}
+    assert match_info(info) == [ItemQueued("set", ItemRef("42", "Song"))]
+
+
+def test_progress_item_url_is_its_page():
+    info_dict = {**downloading(25, 100)["info_dict"], "url": "https://cdn/1", "webpage_url": "p"}
+    events = run_progress({**downloading(25, 100), "info_dict": info_dict})
+    assert events == [ItemProgress("a", ItemRef(SONG.item_id, SONG.title, "p"), 25.0)]
 
 
 def test_untitled_entry_without_url_is_named_after_its_id():

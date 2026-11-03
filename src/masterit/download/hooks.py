@@ -17,6 +17,7 @@ from masterit.download.settings import AudioCodec
 from masterit.download.skip_list import SkipList
 
 SKIPPED_REASON = "Skipped by user"
+LINK_STUB_TYPES = ("url", "url_transparent")
 
 
 class UrlEventReporter:
@@ -102,7 +103,14 @@ def is_listed_entry(info: dict[str, Any]) -> bool:
 
 def make_item_ref(info: dict[str, Any]) -> ItemRef:
     item_id = str(info.get("id", ""))
-    return ItemRef(item_id, str(info.get("title") or info.get("url") or item_id))
+    url = get_page_url(info)
+    return ItemRef(item_id, str(info.get("title") or url or item_id), url)
+
+
+def get_page_url(info: dict[str, Any]) -> str:
+    """Only a link stub's url is a page: a full entry's url is its media file."""
+    stub_url = info.get("url") if info.get("_type") in LINK_STUB_TYPES else None
+    return str(info.get("webpage_url") or stub_url or "")
 
 
 def get_percent(status: dict[str, Any]) -> float:

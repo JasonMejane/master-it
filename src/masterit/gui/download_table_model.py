@@ -16,9 +16,9 @@ from masterit.gui.download_rows import (
 
 type Index = QModelIndex | QPersistentModelIndex
 
-HEADERS = ("", "Title", "Status", "Details")
+HEADERS = ("", "Title", "URL", "Status", "Details")
 CHECK_COLUMN = 0
-STATUS_COLUMN = 2
+STATUS_COLUMN = 3
 CHECK_ROLE = Qt.ItemDataRole.CheckStateRole
 ROOT = QModelIndex()
 STATUS_COLORS = {
@@ -44,7 +44,7 @@ def get_status_label(row: DownloadRow) -> str:
 
 
 def get_cell_text(row: DownloadRow, column: int) -> str:
-    return ("", row.title, get_status_label(row), row.details)[column]
+    return ("", row.title, row.url, get_status_label(row), row.details)[column]
 
 
 def is_checked(row: DownloadRow) -> bool:

@@ -42,12 +42,12 @@ def set_check(model: DownloadTableModel, row: int, state: Qt.CheckState) -> bool
     return model.setData(model.index(row, 0), state.value, CHECK_ROLE)
 
 
-def test_model_has_check_title_status_and_details_columns():
+def test_model_has_check_title_url_status_and_details_columns():
     model = DownloadTableModel()
     headers = [
         model.headerData(column, Qt.Orientation.Horizontal) for column in range(model.columnCount())
     ]
-    assert headers == ["", "Title", "Status", "Details"]
+    assert headers == ["", "Title", "URL", "Status", "Details"]
 
 
 def test_vertical_header_is_default():
@@ -58,7 +58,12 @@ def test_new_item_inserts_row(qtbot: QtBot):
     model = DownloadTableModel()
     with qtbot.waitSignal(model.rowsInserted):
         model.apply_event(ItemProgress("a", SONG, 42.4))
-    assert [get_text(model, 0, column) for column in range(3)] == ["Song", "Downloading 42%", ""]
+    assert [get_text(model, 0, column) for column in range(4)] == [
+        "Song",
+        "a",
+        "Downloading 42%",
+        "",
+    ]
 
 
 def test_known_item_updates_row(qtbot: QtBot):
@@ -67,20 +72,20 @@ def test_known_item_updates_row(qtbot: QtBot):
     with qtbot.waitSignal(model.dataChanged):
         model.apply_event(ItemCompleted("a", SONG, Path("/music/Song.mp3")))
     assert model.rowCount() == 1
-    assert get_text(model, 0, 1) == "Done"
+    assert get_text(model, 0, 2) == "Done"
 
 
 def test_status_labels():
     model = DownloadTableModel()
     model.apply_event(ItemCompleted("a", SONG, Path("/x.mp3"), ("no cover",)))
     model.apply_event(ItemFailed("b", None, "boom"))
-    assert [get_text(model, row, 1) for row in range(2)] == ["Done with warnings", "Failed"]
+    assert [get_text(model, row, 2) for row in range(2)] == ["Done with warnings", "Failed"]
 
 
 def test_details_are_also_tooltips():
     model = DownloadTableModel()
     model.apply_event(ItemFailed("b", None, "boom"))
-    assert model.data(model.index(0, 3), Qt.ItemDataRole.ToolTipRole) == "boom"
+    assert model.data(model.index(0, 4), Qt.ItemDataRole.ToolTipRole) == "boom"
 
 
 def test_failed_rows_are_red_and_others_default():
@@ -125,7 +130,7 @@ def test_cancelling_unfinished_rows_updates_view(qtbot: QtBot):
     model.apply_event(ItemProgress("a", SONG, 40.0))
     with qtbot.waitSignal(model.dataChanged):
         model.mark_unfinished_cancelled()
-    assert get_text(model, 0, 1) == "Cancelled"
+    assert get_text(model, 0, 2) == "Cancelled"
 
 
 def test_cancelling_empty_model_emits_nothing(qtbot: QtBot):
@@ -139,7 +144,7 @@ def test_links_are_inserted_as_pending_rows(qtbot: QtBot):
     insertions = record_insertions(model)
     model.add_links(["a", "b"])
     assert insertions == [(0, 1)]
-    assert [get_text(model, row, 1) for row in range(2)] == ["Pending", "Pending"]
+    assert [get_text(model, row, 2) for row in range(2)] == ["Pending", "Pending"]
     role = Qt.ItemDataRole.ForegroundRole
     assert model.data(model.index(0, 0), role) == QColor(Qt.GlobalColor.gray)
 
@@ -165,8 +170,8 @@ def test_pending_rows_left_at_the_end_fail(qtbot: QtBot):
     model.add_links(["a"])
     with qtbot.waitSignal(model.dataChanged):
         model.mark_pending_failed()
-    assert get_text(model, 0, 1) == "Failed"
-    assert get_text(model, 0, 2) == "Not downloaded"
+    assert get_text(model, 0, 2) == "Failed"
+    assert get_text(model, 0, 3) == "Not downloaded"
 
 
 def test_failing_pending_rows_of_empty_model_emits_nothing(qtbot: QtBot):
@@ -181,7 +186,7 @@ def test_skip_labels():
     model.set_skip_list(SkipList())
     set_check(model, 0, Qt.CheckState.Unchecked)
     model.apply_event(ItemSkipped("b", None))
-    assert [get_text(model, row, 1) for row in range(2)] == ["Will skip", "Skipped"]
+    assert [get_text(model, row, 2) for row in range(2)] == ["Will skip", "Skipped"]
 
 
 def test_pending_rows_have_no_checkbox_without_skip_list():
@@ -190,7 +195,7 @@ def test_pending_rows_have_no_checkbox_without_skip_list():
     assert get_check(model, 0) is None
     assert not model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsUserCheckable
     assert not set_check(model, 0, Qt.CheckState.Unchecked)
-    assert get_text(model, 0, 1) == "Pending"
+    assert get_text(model, 0, 2) == "Pending"
 
 
 def test_pending_rows_are_checked_and_checkable_during_download(qtbot: QtBot):
@@ -218,10 +223,10 @@ def test_unchecking_requests_skip_and_checking_cancels_it(qtbot: QtBot):
     model.set_skip_list(skip_list)
     with qtbot.waitSignal(model.dataChanged):
         assert set_check(model, 0, Qt.CheckState.Unchecked)
-    assert (get_check(model, 0), get_text(model, 0, 1)) == (Qt.CheckState.Unchecked, "Will skip")
+    assert (get_check(model, 0), get_text(model, 0, 2)) == (Qt.CheckState.Unchecked, "Will skip")
     assert skip_list.is_skipped("a", None)
     assert set_check(model, 0, Qt.CheckState.Checked)
-    assert get_text(model, 0, 1) == "Pending"
+    assert get_text(model, 0, 2) == "Pending"
     assert not skip_list.is_skipped("a", None)
 
 
@@ -231,7 +236,7 @@ def test_setting_current_check_state_changes_nothing(qtbot: QtBot):
     model.set_skip_list(SkipList())
     with qtbot.assertNotEmitted(model.dataChanged):
         assert set_check(model, 0, Qt.CheckState.Checked)
-    assert get_text(model, 0, 1) == "Pending"
+    assert get_text(model, 0, 2) == "Pending"
 
 
 def test_downloading_rows_have_no_checkbox():
@@ -254,7 +259,7 @@ def test_started_link_label():
     model = DownloadTableModel()
     model.add_links(["a"])
     model.apply_event(LinkStarted("a"))
-    assert get_text(model, 0, 1) == "Starting"
+    assert get_text(model, 0, 2) == "Starting"
 
 
 def test_check_change_by_user_is_announced(qtbot: QtBot):
@@ -287,7 +292,7 @@ def test_rows_are_checked_together_without_announcing(qtbot: QtBot):
     set_check(model, 1, Qt.CheckState.Unchecked)
     with qtbot.assertNotEmitted(model.check_changed):
         model.set_rows_checked([0, 1, 2], checked=False)
-    assert [get_text(model, row, 1) for row in range(3)] == [
+    assert [get_text(model, row, 2) for row in range(3)] == [
         "Will skip",
         "Will skip",
         "Downloading 1%",

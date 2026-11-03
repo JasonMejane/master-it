@@ -39,6 +39,7 @@ REPLACEABLE_LINK_STATUSES = (*SKIP_TOGGLES, RowStatus.STARTED)
 @dataclass(frozen=True)
 class DownloadRow:
     title: str
+    url: str
     status: RowStatus
     percent: float
     details: str
@@ -66,6 +67,11 @@ class RowSlot:
     item_id: str | None
 
 
+def get_row_url(event: DownloadEvent) -> str:
+    item_url = "" if event.item is None else event.item.url
+    return item_url or event.source_url
+
+
 def get_slot(event: DownloadEvent) -> RowSlot:
     return RowSlot(event.source_url, None if event.item is None else event.item.item_id)
 
@@ -84,7 +90,7 @@ class DownloadRows:
 
     def add_links(self, urls: Iterable[str]) -> None:
         for url in urls:
-            self._rows.append(DownloadRow(url, RowStatus.PENDING, 0.0, ""))
+            self._rows.append(DownloadRow(url, url, RowStatus.PENDING, 0.0, ""))
             self._slots.append(RowSlot(url, None))
 
     def find_placement(self, event: DownloadEvent) -> Placement:
@@ -152,11 +158,15 @@ class DownloadRows:
 
     @_make_row.register
     def _make_queued_row(self, event: ItemQueued, previous: DownloadRow | None) -> DownloadRow:
-        return previous or DownloadRow(event.item.title, RowStatus.PENDING, 0.0, "")
+        return previous or DownloadRow(
+            event.item.title, get_row_url(event), RowStatus.PENDING, 0.0, ""
+        )
 
     @_make_row.register
     def _make_progress_row(self, event: ItemProgress, previous: DownloadRow | None) -> DownloadRow:
-        return DownloadRow(event.item.title, RowStatus.DOWNLOADING, event.percent, "")
+        return DownloadRow(
+            event.item.title, get_row_url(event), RowStatus.DOWNLOADING, event.percent, ""
+        )
 
     @_make_row.register
     def _make_completed_row(
@@ -164,22 +174,22 @@ class DownloadRows:
     ) -> DownloadRow:
         status = RowStatus.WARNING if event.warnings else RowStatus.COMPLETED
         details = "; ".join(event.warnings) or str(event.file_path)
-        return DownloadRow(event.item.title, status, 100.0, details)
+        return DownloadRow(event.item.title, get_row_url(event), status, 100.0, details)
 
     @_make_row.register
     def _make_failed_row(self, event: ItemFailed, previous: DownloadRow | None) -> DownloadRow:
         title = event.source_url if event.item is None else event.item.title
         percent = 0.0 if previous is None else previous.percent
-        return DownloadRow(title, RowStatus.FAILED, percent, event.message)
+        return DownloadRow(title, get_row_url(event), RowStatus.FAILED, percent, event.message)
 
     @_make_row.register
     def _make_skipped_row(self, event: ItemSkipped, previous: DownloadRow | None) -> DownloadRow:
         title = event.source_url if event.item is None else event.item.title
-        return DownloadRow(title, RowStatus.SKIPPED, 0.0, "")
+        return DownloadRow(title, get_row_url(event), RowStatus.SKIPPED, 0.0, "")
 
     @_make_row.register
     def _make_started_row(self, event: LinkStarted, previous: DownloadRow | None) -> DownloadRow:
-        return DownloadRow(event.source_url, RowStatus.STARTED, 0.0, "")
+        return DownloadRow(event.source_url, get_row_url(event), RowStatus.STARTED, 0.0, "")
 
     def _find_item_row(self, slot: RowSlot) -> int | None:
         if slot.item_id is None:

@@ -7,6 +7,7 @@ from pathlib import Path
 class ItemRef:
     item_id: str
     title: str
+    url: str = ""
 
 
 @dataclass(frozen=True)

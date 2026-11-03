@@ -45,7 +45,7 @@ def make_folder_chooser(folder: str) -> Callable[..., str]:
 
 
 def get_status(panel: DownloadPanel, row: int) -> object:
-    return panel.table_model.data(panel.table_model.index(row, 2))
+    return panel.table_model.data(panel.table_model.index(row, 3))
 
 
 def start_download(qtbot: QtBot, panel: DownloadPanel, text: str = "https://a") -> None:
@@ -145,7 +145,7 @@ def test_cancel_marks_unfinished_rows_cancelled(qtbot: QtBot, tmp_path: Path):
     panel.table_model.apply_event(ItemProgress("https://a", SONG, 10.0))
     with qtbot.waitSignal(panel.download_finished, timeout=1000):
         panel.cancel_button.click()
-    assert panel.table_model.data(panel.table_model.index(0, 2)) == "Cancelled"
+    assert panel.table_model.data(panel.table_model.index(0, 3)) == "Cancelled"
 
 
 def test_pasted_links_are_pending_until_they_start(qtbot: QtBot, tmp_path: Path):
