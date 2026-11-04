@@ -6,6 +6,7 @@ from PySide6.QtGui import QColor
 from pytestqt.qtbot import QtBot
 
 from masterit.gui.library_table_model import LibraryTableModel
+from masterit.gui.theme import DARK_TOKENS, LIGHT_TOKENS
 from masterit.library.relocation import Relocation, RelocationPlan, RelocationProblem
 from masterit.tagging.run_tracker import AutoTagCell
 from masterit.tags.fields import TagField
@@ -87,7 +88,7 @@ def test_preview_shows_new_names_and_problems(qtbot: QtBot):
     assert model.data(model.index(0, 1)) == "X Song.mp3"
     assert model.data(model.index(1, 1)) == "⚠ A file with this name already exists"
     role = Qt.ItemDataRole.ForegroundRole
-    assert model.data(model.index(1, 1), role) == QColor(Qt.GlobalColor.red)
+    assert model.data(model.index(1, 1), role) == QColor(LIGHT_TOKENS.danger)
     assert model.data(model.index(0, 1), role) is None
 
 
@@ -175,7 +176,7 @@ def test_tag_preview_shows_edits_highlighted_on_given_files_only(qtbot: QtBot):
     assert get_tag_texts(model, 0) == ["Song", "New", "", "", "", "", ""]
     assert get_tag_texts(model, 1) == [""] * 7
     role = Qt.ItemDataRole.ForegroundRole
-    assert model.data(model.index(0, 4), role) == QColor(Qt.GlobalColor.blue)
+    assert model.data(model.index(0, 4), role) == QColor(LIGHT_TOKENS.link)
     assert model.data(model.index(0, 3), role) is None
     assert model.data(model.index(1, 4), role) is None
 
@@ -250,3 +251,11 @@ def test_auto_tag_column_is_not_editable_or_colored():
     index = model.index(0, AUTO_TAG_COLUMN)
     assert not model.flags(index) & Qt.ItemFlag.ItemIsEditable
     assert model.data(index, Qt.ItemDataRole.ForegroundRole) is None
+
+
+@pytest.mark.usefixtures("dark_theme")
+def test_pending_tags_follow_the_active_theme(qtbot: QtBot):
+    model = make_model(store=FakeTagStore(TAGGED_STORE_TAGS))
+    model.set_tag_preview({SONG: {TagField.ARTIST: "New"}})
+    role = Qt.ItemDataRole.ForegroundRole
+    assert model.data(model.index(0, 4), role) == QColor(DARK_TOKENS.link)

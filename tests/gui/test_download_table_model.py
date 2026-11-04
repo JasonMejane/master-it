@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import QModelIndex, Qt
 from PySide6.QtGui import QColor
 from pytestqt.qtbot import QtBot
@@ -15,6 +16,7 @@ from masterit.download.events import (
 )
 from masterit.download.skip_list import SkipList
 from masterit.gui.download_table_model import DownloadTableModel
+from masterit.gui.theme import DARK_TOKENS, LIGHT_TOKENS
 
 SONG = ItemRef("id1", "Song")
 CHECK_ROLE = Qt.ItemDataRole.CheckStateRole
@@ -93,7 +95,7 @@ def test_failed_rows_are_red_and_others_default():
     model.apply_event(ItemFailed("b", None, "boom"))
     model.apply_event(ItemProgress("a", SONG, 1.0))
     role = Qt.ItemDataRole.ForegroundRole
-    assert model.data(model.index(0, 0), role) == QColor(Qt.GlobalColor.red)
+    assert model.data(model.index(0, 0), role) == QColor(LIGHT_TOKENS.danger)
     assert model.data(model.index(1, 0), role) is None
 
 
@@ -146,7 +148,7 @@ def test_links_are_inserted_as_pending_rows(qtbot: QtBot):
     assert insertions == [(0, 1)]
     assert [get_text(model, row, 2) for row in range(2)] == ["Pending", "Pending"]
     role = Qt.ItemDataRole.ForegroundRole
-    assert model.data(model.index(0, 0), role) == QColor(Qt.GlobalColor.gray)
+    assert model.data(model.index(0, 0), role) == QColor(LIGHT_TOKENS.muted)
 
 
 def test_no_links_insert_nothing(qtbot: QtBot):
@@ -297,3 +299,13 @@ def test_rows_are_checked_together_without_announcing(qtbot: QtBot):
         "Will skip",
         "Downloading 1%",
     ]
+
+
+@pytest.mark.usefixtures("dark_theme")
+def test_status_colors_follow_the_active_theme():
+    model = DownloadTableModel()
+    model.apply_event(ItemFailed("b", None, "boom"))
+    model.add_links(["c"])
+    role = Qt.ItemDataRole.ForegroundRole
+    assert model.data(model.index(0, 0), role) == QColor(DARK_TOKENS.danger)
+    assert model.data(model.index(1, 0), role) == QColor(DARK_TOKENS.muted)

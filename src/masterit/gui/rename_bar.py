@@ -7,12 +7,12 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from masterit.gui.library_context import RenameContext
+from masterit.gui.styling import make_primary_button, mark_muted
 from masterit.library.destinations import DestinationMaker, make_rename_destination
 from masterit.library.library_layout import TagReader, make_tag_name_destination
 from masterit.library.relocation import (
@@ -123,9 +123,10 @@ class RenameBar(QWidget):
             self.operation_input.addItem(operation.label)
         self.rename_text_input = QLineEdit()
         self.rename_text_input.setPlaceholderText("Text")
-        self.apply_button = QPushButton("Rename selected")
+        self.apply_button = make_primary_button("Rename selected", "pencil-line")
         self.apply_button.setEnabled(False)
         self.hint_label = QLabel()
+        mark_muted(self.hint_label)
         # A line is kept for the hint so the bar does not jump while typing.
         self.hint_label.setMinimumHeight(self.hint_label.fontMetrics().height())
         self.hint_label.setWordWrap(True)

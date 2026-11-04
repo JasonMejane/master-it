@@ -1,9 +1,11 @@
 from pathlib import Path
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QWidget
 
+from masterit.gui.elided_label import ElidedLabel
 from masterit.gui.library_source import SESSION_LABEL
+from masterit.gui.styling import make_button
 
 
 class SourceBar(QWidget):
@@ -12,9 +14,9 @@ class SourceBar(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self.open_folder_button = QPushButton("Open folder…")
-        self.session_button = QPushButton("Session downloads")
-        self.source_label = QLabel(SESSION_LABEL)
+        self.open_folder_button = make_button("Open folder…", "folder-open")
+        self.session_button = make_button("Session downloads", "history")
+        self.source_label = ElidedLabel(SESSION_LABEL)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.open_folder_button)

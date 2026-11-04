@@ -2,7 +2,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QSettings, QStandardPaths, Qt, QThreadPool
+from PySide6.QtCore import QPoint, QSettings, QStandardPaths, Qt, QThreadPool
 from PySide6.QtGui import QKeySequence
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog, QToolButton
@@ -18,6 +18,7 @@ from masterit.gui.main_window import (
     make_main_window,
 )
 from masterit.gui.settings_store import SettingsStore
+from masterit.gui.styling import BUTTON_ICON_SIZE
 from masterit.library import move_work
 from masterit.library.relocation import RelocationOutcome
 from masterit.tagging.native_setup import TaggerKeys
@@ -319,9 +320,28 @@ def make_window_counting_edits(qtbot: QtBot, tmp_path: Path, edits: list[TaggerK
 
 
 def get_settings_button(window: MainWindow) -> QToolButton:
-    button = window.tabs.cornerWidget(Qt.Corner.TopRightCorner)
-    assert isinstance(button, QToolButton)
-    return button
+    corner = window.tabs.cornerWidget(Qt.Corner.TopRightCorner)
+    assert corner is not None
+    assert corner.isAncestorOf(window.settings_button)
+    return window.settings_button
+
+
+def test_settings_button_matches_other_buttons_icon_gap(qtbot: QtBot, tmp_path: Path):
+    assert make_window(qtbot, tmp_path).settings_button.iconSize() == BUTTON_ICON_SIZE
+
+
+def test_settings_button_keeps_the_panels_margin(qtbot: QtBot, tmp_path: Path):
+    window = make_window(qtbot, tmp_path)
+    window.resize(900, 700)
+    window.show()
+    qtbot.waitExposed(window)
+    button = window.settings_button
+    top_left = button.mapTo(window, QPoint(0, 0))
+    right_gap = window.width() - (top_left.x() + button.width())
+    panel_layout = window.library_panel.layout()
+    assert panel_layout is not None
+    assert right_gap == panel_layout.contentsMargins().right()
+    assert top_left.y() > 0
 
 
 def test_settings_button_beside_the_tabs_opens_the_editor(qtbot: QtBot, tmp_path: Path):
@@ -388,3 +408,12 @@ def test_second_close_stops_auto_tag_at_once(qtbot: QtBot, tmp_path: Path):
     assert window.isVisible()
     window.close()
     qtbot.waitUntil(lambda: not window.isVisible(), timeout=2000)
+
+
+@pytest.mark.usefixtures("dark_theme")
+def test_window_fits_small_screens(qtbot: QtBot, tmp_path: Path):
+    window = make_window(qtbot, tmp_path)
+    window.library_panel.auto_tag_action.root_label.setText("/music/" + "long-folder/" * 30)
+    minimum = window.minimumSizeHint()
+    assert minimum.width() <= 700
+    assert minimum.height() <= 720

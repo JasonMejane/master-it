@@ -9,6 +9,7 @@ from pytestqt.qtbot import QtBot
 
 from masterit.gui import tag_job
 from masterit.gui.library_panel import LibraryPanel
+from masterit.gui.theme import LIGHT_TOKENS
 from masterit.tags.fields import TagField, Tags
 from masterit.tags.tag_edits import TagOutcome
 from masterit.tags.tag_store import TagStore
@@ -87,7 +88,7 @@ def test_edits_are_previewed_on_selected_rows(qtbot: QtBot):
     assert get_cell(panel, 0, GENRE_COLUMN) == "Rock"
     assert get_cell(panel, 1, GENRE_COLUMN) == ""
     role = Qt.ItemDataRole.ForegroundRole
-    assert get_cell(panel, 0, GENRE_COLUMN, role) == QColor(Qt.GlobalColor.blue)
+    assert get_cell(panel, 0, GENRE_COLUMN, role) == QColor(LIGHT_TOKENS.link)
     assert panel.tag_form.apply_button.isEnabled()
 
 

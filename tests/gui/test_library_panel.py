@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QFileDialog, QLineEdit
+from PySide6.QtWidgets import QFileDialog, QLabel, QLineEdit, QPushButton
 from pytestqt.qtbot import QtBot
 
 from masterit.gui.library_panel import LibraryPanel
@@ -191,8 +191,9 @@ def test_same_download_twice_is_listed_once(qtbot: QtBot, tmp_path: Path):
 def test_table_and_side_panel_share_a_splitter(qtbot: QtBot):
     panel = make_panel(qtbot)
     splitter = panel.content_splitter
-    side_panel = splitter.widget(1)
-    assert splitter.widget(0) is panel.table_view
+    table_part, side_panel = splitter.widget(0), splitter.widget(1)
+    assert table_part is not None
+    assert table_part.isAncestorOf(panel.table_view)
     assert side_panel is not None
     assert side_panel.isAncestorOf(panel.tag_form)
     assert side_panel.isAncestorOf(panel.cover_view)
@@ -345,3 +346,40 @@ def test_hint_does_not_move_the_rename_bar(qtbot: QtBot, tmp_path: Path):
     qtbot.wait(10)
     assert get_hint(panel) == NO_MATCH_HINT
     assert (panel.rename_bar.rename_text_input.size(), panel.minimumSizeHint()) == sizes
+
+
+def test_panel_is_split_into_titled_sections(qtbot: QtBot):
+    panel = make_panel(qtbot)
+    titles = sorted(label.text() for label in panel.findChildren(QLabel, "sectionTitle"))
+    assert titles == ["Files", "Tag editor"]
+
+
+def test_rename_bar_sits_with_the_files(qtbot: QtBot):
+    panel = make_panel(qtbot)
+    files_part = panel.content_splitter.widget(0)
+    assert files_part is not None
+    assert files_part.isAncestorOf(panel.rename_bar)
+
+
+def test_main_actions_are_primary_and_buttons_have_icons(qtbot: QtBot):
+    panel = make_panel(qtbot)
+    primary = [panel.tag_form.apply_button, panel.rename_bar.apply_button]
+    primary.append(panel.auto_tag_action.auto_tag_button)
+    assert all(button.property("role") == "primary" for button in primary)
+    assert all(not button.icon().isNull() for button in panel.findChildren(QPushButton))
+    assert panel.status_label.property("muted") is True
+
+
+def test_files_are_striped_without_row_numbers(qtbot: QtBot):
+    panel = make_panel(qtbot)
+    assert panel.table_view.alternatingRowColors()
+    assert panel.table_view.verticalHeader().isHidden()
+
+
+def test_path_labels_shrink_instead_of_widening_the_panel(qtbot: QtBot):
+    panel = make_panel(qtbot)
+    width = panel.minimumSizeHint().width()
+    long_path = "/music/" + "long-folder/" * 30
+    panel.source_bar.source_label.setText(long_path)
+    panel.auto_tag_action.root_label.setText(long_path)
+    assert panel.minimumSizeHint().width() == width

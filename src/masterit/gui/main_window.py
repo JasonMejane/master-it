@@ -4,20 +4,32 @@ from pathlib import Path
 from typing import override
 
 from PySide6.QtCore import QSettings, QStandardPaths, Qt, QThreadPool
-from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
-from PySide6.QtWidgets import QMainWindow, QSplitter, QTabWidget, QToolButton, QWidget
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QMainWindow,
+    QSplitter,
+    QStyle,
+    QTabWidget,
+    QToolButton,
+    QWidget,
+)
 
 from masterit.download.downloader import YtDlpDownloader
 from masterit.gui.download_panel import DownloadPanel
+from masterit.gui.icons import get_icon
 from masterit.gui.library_panel import LibraryPanel
 from masterit.gui.library_services import LibraryServices
 from masterit.gui.settings_dialog import edit_tagger_keys
 from masterit.gui.settings_store import SettingsStore
 from masterit.gui.splitter_state import get_splitter_state
+from masterit.gui.styling import BUTTON_ICON_SIZE
 from masterit.tagging.native_setup import TaggerKeys, make_native_tagger
 from masterit.tagging.tagger import Tagger
 from masterit.tags.cover_store import MutagenCoverStore
 from masterit.tags.tag_store import MutagenTagStore
+
+CORNER_VERTICAL_MARGIN = 4
 
 type KeysEditor = Callable[[QWidget | None, TaggerKeys], TaggerKeys | None]
 
@@ -43,12 +55,12 @@ class MainWindow(QMainWindow):
         download_panel.file_downloaded.connect(library_panel.add_downloaded_file)
         self.setCentralWidget(self.tabs)
         self.settings_action = self._make_settings_action()
-        self.tabs.setCornerWidget(self._make_settings_button(), Qt.Corner.TopRightCorner)
+        self.settings_button = self._make_settings_button()
+        self.tabs.setCornerWidget(self._make_corner(self.settings_button), Qt.Corner.TopRightCorner)
         self._restore_window_state()
 
     def _make_settings_action(self) -> QAction:
-        icon = QIcon.fromTheme("configure", QIcon.fromTheme("preferences-system"))
-        action = QAction(icon, "Settings", self)
+        action = QAction(get_icon("settings"), "Settings", self)
         action.setShortcut(QKeySequence("Ctrl+,"))
         shortcut = action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
         action.setToolTip(f"Settings ({shortcut})")
@@ -60,7 +72,16 @@ class MainWindow(QMainWindow):
         button = QToolButton()
         button.setDefaultAction(self.settings_action)
         button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        button.setIconSize(BUTTON_ICON_SIZE)
         return button
+
+    def _make_corner(self, button: QToolButton) -> QWidget:
+        corner = QWidget()
+        layout = QHBoxLayout(corner)
+        right_margin = self.style().pixelMetric(QStyle.PixelMetric.PM_LayoutRightMargin)
+        layout.setContentsMargins(0, CORNER_VERTICAL_MARGIN, right_margin, CORNER_VERTICAL_MARGIN)
+        layout.addWidget(button)
+        return corner
 
     def _edit_settings(self) -> None:
         keys = self._edit_keys(self, self._store.load_tagger_keys())

@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
-    QPushButton,
     QSplitter,
     QTableView,
     QVBoxLayout,
@@ -37,6 +36,7 @@ from masterit.gui.download_job import Downloader, DownloadJob
 from masterit.gui.download_rows import DownloadSummary
 from masterit.gui.download_table_model import CHECK_COLUMN, STATUS_COLUMN, DownloadTableModel
 from masterit.gui.settings_store import SettingsStore
+from masterit.gui.styling import make_button, make_primary_button, make_section, mark_muted
 
 LINKS_DEFAULT_HEIGHT = 120
 MISSING_FFMPEG_MESSAGE = "ffmpeg was not found: install it to download audio."
@@ -210,50 +210,69 @@ class DownloadPanel(QWidget):
         self.url_input = LinksInput()
         self.url_input.setPlaceholderText("Paste one or more YouTube links, one per line")
         self.output_dir_input = QLineEdit()
-        self.browse_button = QPushButton("Browse…")
+        self.browse_button = make_button("Browse…", "folder-open")
         self.codec_input = QComboBox()
         for codec in AudioCodec:
             self.codec_input.addItem(codec.upper(), codec)
         self.quality_input = QComboBox()
         self.quality_input.addItems(AUDIO_QUALITIES)
-        self.download_button = QPushButton("Download")
-        self.cancel_button = QPushButton("Cancel")
+        self.download_button = make_primary_button("Download", "download")
+        self.cancel_button = make_button("Cancel", "x")
         self.status_label = QLabel()
+        mark_muted(self.status_label)
+        self._build_table()
+
+    def _build_table(self) -> None:
         self.table_model = DownloadTableModel()
         self.table_view = QTableView()
         self.table_view.setModel(self.table_model)
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table_view.setAlternatingRowColors(True)
+        self.table_view.verticalHeader().hide()
         header = self.table_view.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         for column in (CHECK_COLUMN, STATUS_COLUMN):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
 
     def _build_layout(self) -> None:
-        output_row = QHBoxLayout()
-        output_row.addWidget(self.output_dir_input)
-        output_row.addWidget(self.browse_button)
-        form = QFormLayout()
-        form.addRow("Links", self.url_input)
-        form.addRow("Output folder", output_row)
-        form.addRow("Format", self.codec_input)
-        form.addRow("Quality (kbps)", self.quality_input)
-        buttons = QHBoxLayout()
-        buttons.addWidget(self.download_button)
-        buttons.addWidget(self.cancel_button)
-        buttons.addWidget(self.status_label, stretch=1)
         form_part = QWidget()
         form_column = QVBoxLayout(form_part)
         form_column.setContentsMargins(0, 0, 0, 0)
-        form_column.addLayout(form)
-        form_column.addLayout(buttons)
+        form_column.addWidget(make_section("Links", self.url_input), stretch=1)
+        form_column.addWidget(make_section("Output", self._build_output_form()))
         layout = QVBoxLayout(self)
         layout.addWidget(self._build_content_splitter(form_part))
+
+    def _build_output_form(self) -> QFormLayout:
+        folder_row = QHBoxLayout()
+        folder_row.addWidget(self.output_dir_input, stretch=1)
+        folder_row.addWidget(self.browse_button)
+        format_row = QHBoxLayout()
+        format_row.addWidget(self.codec_input)
+        format_row.addSpacing(12)
+        quality_label = QLabel("Quality (kbps)")
+        quality_label.setBuddy(self.quality_input)
+        format_row.addWidget(quality_label)
+        format_row.addWidget(self.quality_input)
+        format_row.addStretch()
+        form = QFormLayout()
+        form.addRow("Folder", folder_row)
+        form.addRow("Format", format_row)
+        form.addRow(self._build_action_row())
+        return form
+
+    def _build_action_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.addWidget(self.status_label, stretch=1)
+        row.addWidget(self.cancel_button)
+        row.addWidget(self.download_button)
+        return row
 
     def _build_content_splitter(self, form_part: QWidget) -> QSplitter:
         self.content_splitter = QSplitter(Qt.Orientation.Vertical)
         self.content_splitter.addWidget(form_part)
-        self.content_splitter.addWidget(self.table_view)
+        self.content_splitter.addWidget(make_section("Queue", self.table_view))
         self.content_splitter.setChildrenCollapsible(False)
         self.content_splitter.setStretchFactor(1, 1)
         return self.content_splitter

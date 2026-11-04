@@ -12,6 +12,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 
 from masterit.gui.tag_labels import TAG_LABELS
+from masterit.gui.theme import get_active_tokens
 from masterit.library.relocation import Relocation, RelocationPlan
 from masterit.tagging.run_tracker import AutoTagCell
 from masterit.tags.fields import TagField, Tags
@@ -29,8 +30,6 @@ FIRST_TAG_COLUMN = len(FILE_HEADERS)
 AUTO_TAG_COLUMN = FIRST_TAG_COLUMN + len(TAG_COLUMNS)
 NO_AUTO_TAG = AutoTagCell("")
 ROOT = QModelIndex()
-PROBLEM_COLOR = QColor(Qt.GlobalColor.red)
-PENDING_COLOR = QColor(Qt.GlobalColor.blue)
 
 
 def get_preview_text(entry: Relocation | None) -> str:
@@ -192,7 +191,7 @@ class LibraryTableModel(QAbstractTableModel):
     def _get_foreground(self, path: Path, column: int) -> QColor | None:
         field = get_tag_field(column)
         if field is not None:
-            return PENDING_COLOR if self._is_tag_pending(path, field) else None
+            return QColor(get_active_tokens().link) if self._is_tag_pending(path, field) else None
         entry = self._preview.get(path)
         has_problem = column == PREVIEW_COLUMN and entry is not None and not entry.is_valid
-        return PROBLEM_COLOR if has_problem else None
+        return QColor(get_active_tokens().danger) if has_problem else None

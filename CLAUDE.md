@@ -17,6 +17,9 @@ update it with `uv lock -P yt-dlp && uv sync`.
 - `src/masterit/{download,library,tags,tagging,repack}` are the Qt-free core;
   `tests/test_architecture.py` enforces it. Only `gui/` and `__main__.py` use PySide6;
   `__main__.py` stays a thin shim, app wiring lives in tested `gui/` code.
+- Look and feel lives in `gui/theme.py` + `gui/style.qss` (light/dark tokens); build
+  buttons and panels with `gui/styling.py` helpers, icons from `gui/icons/` — no
+  per-widget colors or stylesheets.
 - File operations (rename, move, tag writes) are built as plans: preview first, then apply.
 - Auto-tagging goes through the `Tagger` protocol, implemented by the native tagger in
   `tagging/`; its behaviour only changes as SPECS.md says.

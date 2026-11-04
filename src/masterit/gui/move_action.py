@@ -2,11 +2,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QThreadPool, Signal
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QPushButton, QWidget
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QWidget
 
 from masterit.gui.library_context import RelocationContext
 from masterit.gui.move_dialog import confirm_move
 from masterit.gui.move_job import MoveJob
+from masterit.gui.styling import make_button
 from masterit.library.destinations import make_move_destination
 from masterit.library.relocation import (
     FolderCheck,
@@ -51,7 +52,7 @@ class MoveAction(QWidget):
         self._move_job: MoveJob | None = None
         self._move_crash = ""
         self._move_skipped = 0
-        self.move_button = QPushButton("Move selected to…")
+        self.move_button = make_button("Move selected to…", "folder-input")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.move_button)

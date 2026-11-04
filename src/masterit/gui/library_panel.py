@@ -4,6 +4,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFormLayout,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -21,6 +23,7 @@ from masterit.gui.library_table_model import LibraryTableModel
 from masterit.gui.move_action import MoveAction
 from masterit.gui.rename_bar import RenameBar
 from masterit.gui.source_bar import SourceBar
+from masterit.gui.styling import make_card, make_section, mark_muted
 from masterit.gui.summaries import format_relocation_summary, format_tag_summary
 from masterit.gui.tag_form import TagForm
 from masterit.library.relocation import (
@@ -42,6 +45,7 @@ class LibraryPanel(QWidget):
         self._source = LibrarySource()
         self._build_table(make_tag_cache(services.tag_store))
         self.status_label = QLabel()
+        mark_muted(self.status_label)
         self.source_bar = SourceBar()
         self.rename_bar = RenameBar(self)
         self.move_action = MoveAction(
@@ -149,18 +153,30 @@ class LibraryPanel(QWidget):
         self.table_view.setModel(self.table_model)
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table_view.setAlternatingRowColors(True)
+        self.table_view.verticalHeader().hide()
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
 
     def _build_layout(self) -> None:
-        top_row = QHBoxLayout()
-        top_row.addWidget(self.source_bar, stretch=1)
-        top_row.addWidget(self.move_action)
         layout = QVBoxLayout(self)
-        layout.addLayout(top_row)
-        layout.addWidget(self.auto_tag_action)
+        layout.addWidget(make_card(self._build_toolbar_form()))
         layout.addWidget(self._build_content_splitter(), stretch=1)
-        layout.addWidget(self.rename_bar)
         layout.addWidget(self.status_label)
+
+    def _build_toolbar_form(self) -> QFormLayout:
+        source_row = QHBoxLayout()
+        source_row.addWidget(self.source_bar, stretch=1)
+        source_row.addWidget(self.move_action)
+        form = QFormLayout()
+        form.addRow("Source", source_row)
+        form.addRow("Library", self.auto_tag_action)
+        return form
+
+    def _build_files_part(self) -> QFrame:
+        files_column = QVBoxLayout()
+        files_column.addWidget(self.table_view, stretch=1)
+        files_column.addWidget(self.rename_bar)
+        return make_section("Files", files_column)
 
     def _build_content_splitter(self) -> QSplitter:
         side_panel = QWidget()
@@ -170,11 +186,13 @@ class LibraryPanel(QWidget):
         side_column.addWidget(self.tag_form)
         side_column.addStretch()
         self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.content_splitter.addWidget(self.table_view)
-        self.content_splitter.addWidget(side_panel)
+        self.content_splitter.addWidget(self._build_files_part())
+        self.content_splitter.addWidget(make_section("Tag editor", side_panel))
         self.content_splitter.setChildrenCollapsible(False)
         self.content_splitter.setStretchFactor(0, 7)
         self.content_splitter.setStretchFactor(1, 3)
+        # Size hints alone would skew the default split, the rename bar being wide.
+        self.content_splitter.setSizes([7000, 3000])
         return self.content_splitter
 
     def _connect_signals(self) -> None:

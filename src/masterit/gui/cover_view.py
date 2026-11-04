@@ -37,6 +37,7 @@ class CoverView(QLabel):
         self.setMinimumSize(COVER_SIZE, COVER_SIZE)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setObjectName("cover")
 
     @override
     def resizeEvent(self, event: QResizeEvent) -> None:

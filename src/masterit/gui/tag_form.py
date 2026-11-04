@@ -8,12 +8,12 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QStyle,
     QWidget,
 )
 
 from masterit.gui.library_context import TagContext
+from masterit.gui.styling import make_button, make_primary_button
 from masterit.gui.tag_job import TagJob
 from masterit.gui.tag_labels import TAG_LABELS
 from masterit.tags.fields import TagField, Tags
@@ -186,11 +186,11 @@ class TagForm(QWidget):
             action = QAction(clear_icon, "Remove from all selected files", line)
             line.addAction(action, QLineEdit.ActionPosition.TrailingPosition)
             self.clear_actions[field] = action
-        self.apply_button = QPushButton("Apply tags")
-        self.reset_button = QPushButton("Reset")
-        self.tags_from_name_button = QPushButton("Tags from name")
+        self.apply_button = make_primary_button("Apply tags", "check")
+        self.reset_button = make_button("Reset", "rotate-ccw")
+        self.tags_from_name_button = make_button("Tags from name", "tag")
         self.tags_from_name_button.setToolTip('Set Artist and Title from "Artist - Title" names')
-        self.name_from_tags_button = QPushButton("Name from tags")
+        self.name_from_tags_button = make_button("Name from tags", "text-cursor-input")
         self.name_from_tags_button.setToolTip('Rename to "Artist - Title" in the rename bar')
         self.problem_label = QLabel()
         self.problem_label.setWordWrap(True)
@@ -209,6 +209,7 @@ class TagForm(QWidget):
         form.addRow(self.problem_label)
         form.addRow(buttons)
         form.setContentsMargins(0, 0, 0, 0)
+        form.setVerticalSpacing(4)
         self.setLayout(form)
 
     def _connect_signals(self) -> None:

@@ -2,13 +2,15 @@ from functools import partial
 from pathlib import Path
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QWidget
 
 from masterit.cancellation import CancelToken
 from masterit.gui.auto_tag_jobs import TagRunJob, create_auto_tag_job, create_repack_job
+from masterit.gui.elided_label import ElidedLabel
 from masterit.gui.library_context import AutoTagContext
 from masterit.gui.library_services import LibraryServices
 from masterit.gui.move_action import make_download_protection
+from masterit.gui.styling import make_button, make_primary_button
 from masterit.gui.summaries import format_relocation_summary
 from masterit.library.relocation import RelocationOutcome
 from masterit.repack.pipeline import RepackPlan, make_repack_plan, make_suggested_album
@@ -175,11 +177,11 @@ class AutoTagAction(QWidget):
         return f"{self._move_summary} {tag_summary}".strip()
 
     def _build_widgets(self) -> None:
-        self.root_button = QPushButton("Library root…")
-        self.root_label = QLabel()
-        self.repack_button = QPushButton("Repack selected")
-        self.auto_tag_button = QPushButton("Auto-tag selected")
-        self.cancel_button = QPushButton("Cancel")
+        self.root_button = make_button("Library root…", "library")
+        self.root_label = ElidedLabel()
+        self.repack_button = make_button("Repack selected", "package")
+        self.auto_tag_button = make_primary_button("Auto-tag selected", "wand-sparkles")
+        self.cancel_button = make_button("Cancel", "x")
 
     def _build_layout(self) -> None:
         layout = QHBoxLayout(self)

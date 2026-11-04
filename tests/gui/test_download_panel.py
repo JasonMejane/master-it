@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QFileDialog, QStyle, QStyleOptionViewItem
+from PySide6.QtWidgets import QFileDialog, QLabel, QStyle, QStyleOptionViewItem, QWidget
 from pytestqt.qtbot import QtBot
 
 from masterit.download.events import ItemProgress
@@ -331,7 +331,9 @@ def test_form_and_table_share_a_vertical_splitter(qtbot: QtBot, tmp_path: Path):
     assert form_part is not None
     assert form_part.isAncestorOf(panel.url_input)
     assert form_part.isAncestorOf(panel.download_button)
-    assert splitter.widget(1) is panel.table_view
+    table_part = splitter.widget(1)
+    assert table_part is not None
+    assert table_part.isAncestorOf(panel.table_view)
     assert not splitter.childrenCollapsible()
 
 
@@ -349,3 +351,33 @@ def test_links_box_opens_at_its_former_capped_height(qtbot: QtBot, tmp_path: Pat
     panel.resize(900, 900)
     panel.show()
     assert panel.url_input.height() == 120
+
+
+def get_section_titles(widget: QWidget) -> list[str]:
+    return sorted(label.text() for label in widget.findChildren(QLabel, "sectionTitle"))
+
+
+def test_form_is_split_into_titled_sections(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    assert get_section_titles(panel) == ["Links", "Output", "Queue"]
+
+
+def test_download_is_the_primary_action(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    assert panel.download_button.property("role") == "primary"
+    for button in (panel.download_button, panel.cancel_button, panel.browse_button):
+        assert not button.icon().isNull()
+    assert panel.status_label.property("muted") is True
+
+
+def test_queue_is_striped_without_row_numbers(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    assert panel.table_view.alternatingRowColors()
+    assert panel.table_view.verticalHeader().isHidden()
+
+
+def test_quality_label_is_tied_to_its_input(qtbot: QtBot, tmp_path: Path):
+    panel = PanelFixture(qtbot, tmp_path, RecordingDownloader()).panel
+    buddies = {label.text(): label.buddy() for label in panel.findChildren(QLabel)}
+    assert buddies["Quality (kbps)"] is panel.quality_input
+    assert buddies["Links"] is panel.url_input

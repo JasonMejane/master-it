@@ -1,4 +1,5 @@
 from collections.abc import Iterable, Sequence
+from operator import attrgetter
 from typing import Any, override
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt, Signal
@@ -13,6 +14,7 @@ from masterit.gui.download_rows import (
     Placement,
     RowStatus,
 )
+from masterit.gui.theme import get_active_tokens
 
 type Index = QModelIndex | QPersistentModelIndex
 
@@ -21,11 +23,11 @@ CHECK_COLUMN = 0
 STATUS_COLUMN = 3
 CHECK_ROLE = Qt.ItemDataRole.CheckStateRole
 ROOT = QModelIndex()
-STATUS_COLORS = {
-    RowStatus.FAILED: QColor(Qt.GlobalColor.red),
-    RowStatus.PENDING: QColor(Qt.GlobalColor.gray),
-    RowStatus.SKIP_REQUESTED: QColor(Qt.GlobalColor.gray),
-    RowStatus.SKIPPED: QColor(Qt.GlobalColor.gray),
+STATUS_COLOR_TOKENS = {
+    RowStatus.FAILED: attrgetter("danger"),
+    RowStatus.PENDING: attrgetter("muted"),
+    RowStatus.SKIP_REQUESTED: attrgetter("muted"),
+    RowStatus.SKIPPED: attrgetter("muted"),
 }
 STATUS_LABELS = {
     RowStatus.PENDING: "Pending",
@@ -53,6 +55,11 @@ def is_checked(row: DownloadRow) -> bool:
 
 def get_check_state(row: DownloadRow) -> Qt.CheckState:
     return Qt.CheckState.Checked if is_checked(row) else Qt.CheckState.Unchecked
+
+
+def get_status_color(status: RowStatus) -> QColor | None:
+    get_token = STATUS_COLOR_TOKENS.get(status)
+    return None if get_token is None else QColor(get_token(get_active_tokens()))
 
 
 class DownloadTableModel(QAbstractTableModel):
@@ -178,7 +185,7 @@ class DownloadTableModel(QAbstractTableModel):
 
     def _get_role_data(self, row: DownloadRow, column: int, role: int) -> Any:
         if role == Qt.ItemDataRole.ForegroundRole:
-            return STATUS_COLORS.get(row.status)
+            return get_status_color(row.status)
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole):
             return get_cell_text(row, column)
         return None
