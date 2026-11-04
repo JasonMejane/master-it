@@ -16,10 +16,11 @@ from PySide6.QtWidgets import (
 )
 
 from masterit.gui.auto_tag_action import AutoTagAction
+from masterit.gui.column_fitter import ColumnFitter
 from masterit.gui.cover_view import CoverView
 from masterit.gui.library_services import LibraryServices
 from masterit.gui.library_source import LibrarySource
-from masterit.gui.library_table_model import LibraryTableModel
+from masterit.gui.library_table_model import FIRST_TAG_COLUMN, LibraryTableModel
 from masterit.gui.move_action import MoveAction
 from masterit.gui.rename_bar import RenameBar
 from masterit.gui.source_bar import SourceBar
@@ -156,6 +157,7 @@ class LibraryPanel(QWidget):
         self.table_view.setAlternatingRowColors(True)
         self.table_view.verticalHeader().hide()
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        ColumnFitter(self.table_view, wide_columns=set(range(FIRST_TAG_COLUMN)))
 
     def _build_layout(self) -> None:
         layout = QVBoxLayout(self)

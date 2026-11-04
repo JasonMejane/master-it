@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QFileDialog, QLabel, QLineEdit, QPushButton
+from PySide6.QtWidgets import QFileDialog, QHeaderView, QLabel, QLineEdit, QPushButton
 from pytestqt.qtbot import QtBot
 
 from masterit.gui.library_panel import LibraryPanel
@@ -383,3 +383,35 @@ def test_path_labels_shrink_instead_of_widening_the_panel(qtbot: QtBot):
     panel.source_bar.source_label.setText(long_path)
     panel.auto_tag_action.root_label.setText(long_path)
     assert panel.minimumSizeHint().width() == width
+
+
+def is_table_filled(panel: LibraryPanel) -> bool:
+    header = panel.table_view.horizontalHeader()
+    widths = sum(header.sectionSize(column) for column in range(header.count()))
+    return widths == panel.table_view.viewport().width()
+
+
+def test_file_columns_fill_the_table(qtbot: QtBot):
+    panel = make_panel(qtbot)
+    panel.resize(2400, 800)
+    panel.show()
+    qtbot.waitUntil(lambda: is_table_filled(panel))
+    header = panel.table_view.horizontalHeader()
+    assert header.sectionResizeMode(0) == QHeaderView.ResizeMode.Interactive
+    name_width, album_artist_width = header.sectionSize(0), header.sectionSize(6)
+    assert name_width > album_artist_width >= header.sectionSizeHint(6)
+
+
+def test_column_proportions_survive_opening_a_folder(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    panel = make_panel(qtbot)
+    panel.resize(2400, 800)
+    panel.show()
+    qtbot.waitUntil(lambda: is_table_filled(panel))
+    header = panel.table_view.horizontalHeader()
+    widths = [header.sectionSize(column) for column in range(header.count())]
+    make_files(tmp_path, "a.mp3")
+    open_folder(panel, tmp_path, monkeypatch)
+    qtbot.waitUntil(lambda: is_table_filled(panel))
+    assert [header.sectionSize(column) for column in range(header.count())] == widths
