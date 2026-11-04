@@ -97,6 +97,17 @@ def test_actions_start_idle_and_need_a_selection(qtbot: QtBot, tmp_path: Path):
     assert not panel.is_busy
 
 
+def test_short_action_labels_explain_they_act_on_the_selection(qtbot: QtBot, tmp_path: Path):
+    action = make_session_panel(qtbot, tmp_path, FakeTagger()).auto_tag_action
+    assert action.repack_button.text() == "Repack"
+    assert action.auto_tag_button.text() == "Auto-tag"
+    assert (
+        action.repack_button.toolTip()
+        == "Clean the selected names, move the files into the library as an album, then tag them"
+    )
+    assert action.auto_tag_button.toolTip() == "Auto-tag the selected files"
+
+
 def test_root_label_shows_saved_root(qtbot: QtBot, tmp_path: Path):
     panel = make_session_panel(qtbot, tmp_path, FakeTagger(), root_store=FakeRootStore(tmp_path))
     assert panel.auto_tag_action.root_label.text() == f"Library: {tmp_path}"

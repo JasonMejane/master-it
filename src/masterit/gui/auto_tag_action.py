@@ -179,8 +179,12 @@ class AutoTagAction(QWidget):
     def _build_widgets(self) -> None:
         self.root_button = make_button("Library root…", "library")
         self.root_label = ElidedLabel()
-        self.repack_button = make_button("Repack selected", "package")
-        self.auto_tag_button = make_primary_button("Auto-tag selected", "wand-sparkles")
+        self.repack_button = make_button("Repack", "package")
+        self.repack_button.setToolTip(
+            "Clean the selected names, move the files into the library as an album, then tag them"
+        )
+        self.auto_tag_button = make_primary_button("Auto-tag", "wand-sparkles")
+        self.auto_tag_button.setToolTip("Auto-tag the selected files")
         self.cancel_button = make_button("Cancel", "x")
 
     def _build_layout(self) -> None:

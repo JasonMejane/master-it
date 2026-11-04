@@ -86,10 +86,15 @@ def test_resizing_the_view_keeps_user_proportions(qtbot: QtBot):
     view = make_fitted_view(qtbot, columns=2)
     wait_until_filled(qtbot, view)
     view.horizontalHeader().resizeSection(0, view.viewport().width() * 3 // 4)
+    user_share = get_first_column_share(view)
     view.resize(1000, 300)
     wait_until_filled(qtbot, view)
-    first, second = get_column_widths(view)
-    assert first == pytest.approx(3 * second, abs=2)
+    assert get_first_column_share(view) == pytest.approx(user_share, abs=0.005)
+
+
+def get_first_column_share(view: QTableView) -> float:
+    widths = get_column_widths(view)
+    return widths[0] / sum(widths)
 
 
 def drag_column_border(view: QTableView, column: int, distance: int) -> None:

@@ -2,11 +2,20 @@ from collections.abc import Iterator
 
 import pytest
 from PySide6.QtCore import SIGNAL, Qt
+from PySide6.QtGui import QFont, QFontInfo
 from PySide6.QtWidgets import QApplication
 
 from masterit.gui import theme
 
 SCHEME_CHANGED = SIGNAL("colorSchemeChanged(Qt::ColorScheme)")
+# Layout sizes depend on font metrics: one font makes them match on every machine and CI.
+PINNED_FONT_FAMILY = "DejaVu Sans"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def pinned_font(qapp: QApplication) -> None:
+    qapp.setFont(QFont(PINNED_FONT_FAMILY, 9))
+    assert QFontInfo(qapp.font()).family() == PINNED_FONT_FAMILY, "install fonts-dejavu-core"
 
 
 @pytest.fixture(autouse=True)
